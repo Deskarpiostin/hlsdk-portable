@@ -9,7 +9,7 @@
         tools:targetApi="r">
 
         <meta-data
-            android:name="su.xash.engine.gamedir"
+            android:name="dod-client"
             android:value="valve" />
 
         <activity
