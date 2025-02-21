@@ -6,10 +6,10 @@ apply plugin: 'com.android.application'
 
 android {
     ndkVersion '26.1.10909125'
-    namespace 'com.example.hlsdk'
+    namespace 'com.deskarpion.dodclient'
 
     defaultConfig {
-        applicationId 'com.example.hlsdk'
+        applicationId 'com.deskarpion.dodclient'
         versionName '1.0'
         versionCode getBuildNum()
         minSdkVersion 3
