@@ -26,7 +26,9 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: recursive
-
+    - name: automated-build-android-app-with-github-action
+      uses: amirisback/automated-build-android-app-with-github-action@2.2.5
+  
     - name: Checkout steam-runtime
       if: startsWith(matrix.os, 'ubuntu')
       uses: actions/checkout@v4
