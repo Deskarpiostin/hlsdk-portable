@@ -1,0 +1,167 @@
+name: build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+          - os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+          - os: windows-2019
+            cc: cl
+            cxx: cl
+          - os: ubuntu-latest
+            cc: aarch64-linux-android21-clang
+            cxx: aarch64-linux-android21-clang++
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+      STEAMRT_SNAPSHOT: latest-steam-client-general-availability
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Checkout steam-runtime
+      if: startsWith(matrix.os, 'ubuntu') && matrix.cc != 'aarch64-linux-android21-clang'
+      uses: actions/checkout@v4
+      with:
+        repository: ValveSoftware/steam-runtime
+        path: steam-runtime
+
+    - name: Cache steam-runtime
+      if: startsWith(matrix.os, 'ubuntu') && matrix.cc != 'aarch64-linux-android21-clang'
+      id: cache-steam-runtime
+      uses: actions/cache@v4
+      with:
+        path: com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
+        key: steam-runtime-${{ env.STEAMRT_SNAPSHOT }}
+
+    - name: Download steam-runtime
+      if: startsWith(matrix.os, 'ubuntu') && matrix.cc != 'aarch64-linux-android21-clang' && steps.cache-steam-runtime.outputs.cache-hit != 'true'
+      run: wget --no-verbose https://repo.steampowered.com/steamrt-images-scout/snapshots/${{ env.STEAMRT_SNAPSHOT }}/com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
+
+    - name: Install steam runtime
+      if: startsWith(matrix.os, 'ubuntu') && matrix.cc != 'aarch64-linux-android21-clang'
+      run: |
+        sudo apt update
+        ./steam-runtime/setup_chroot.sh --i386 --tarball ./com.valvesoftware.SteamRuntime.Sdk-i386-scout-sysroot.tar.gz
+        sudo sed -i 's/groups=sudo/groups=adm/g' /etc/schroot/chroot.d/steamrt_scout_i386.conf
+
+    - name: Setup Android SDK and NDK
+      if: matrix.cc == 'aarch64-linux-android21-clang'
+      run: |
+        sudo apt update
+        sudo apt install -y openjdk-8-jdk wget unzip
+        wget https://dl.google.com/android/repository/commandlinetools-linux-6858069_latest.zip -O commandlinetools.zip
+        unzip commandlinetools.zip -d $HOME/cmdline-tools
+        yes | $HOME/cmdline-tools/cmdline-tools/bin/sdkmanager --sdk_root=$HOME/android-sdk "platform-tools" "platforms;android-21" "ndk-bundle"
+        export ANDROID_NDK_HOME=$HOME/android-sdk/ndk-bundle
+        export ANDROID_SDK_HOME=$HOME/android-sdk
+        export PATH=$PATH:$ANDROID_SDK_HOME/tools:$ANDROID_SDK_HOME/platform-tools:$ANDROID_NDK_HOME
+
+    - name: Build on Linux
+      if: startsWith(matrix.os, 'ubuntu') && matrix.cc != 'aarch64-linux-android21-clang'
+      run: |
+        schroot --chroot steamrt_scout_i386 -- cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPOLLY=ON -B build -S . -DCMAKE_EXE_LINKER_FLAGS="-Wl,--no-undefined" -DCMAKE_INSTALL_PREFIX="$PWD/dist"
+        schroot --chroot steamrt_scout_i386 -- cmake --build build --target all
+        schroot --chroot steamrt_scout_i386 -- cmake --build build --target install
+
+    - name: Build on Linux with vgui
+      if: startsWith(matrix.os, 'ubuntu') && startsWith(matrix.cc, 'gcc')
+      run: |
+        schroot --chroot steamrt_scout_i386 -- cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPOLLY=ON -B build-vgui -S . -DCMAKE_EXE_LINKER_FLAGS="-Wl,--no-undefined" -DUSE_VGUI=ON -DCMAKE_INSTALL_PREFIX="$PWD/dist-vgui"
+        cp vgui_support/vgui-dev/lib/vgui.so build-vgui/cl_dll
+        cp vgui_support/vgui-dev/lib/vgui.so build-vgui
+        schroot --chroot steamrt_scout_i386 -- cmake --build build-vgui --target all
+        schroot --chroot steamrt_scout_i386 -- cmake --build build-vgui --target install
+
+    - name: Add msbuild to PATH
+      if: startsWith(matrix.os, 'windows')
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Build on Windows
+      if: startsWith(matrix.os, 'windows')
+      run: |
+        cmake -G "Visual Studio 16 2019" -A Win32 -B build -DCMAKE_INSTALL_PREFIX="dist"
+        msbuild -verbosity:normal /property:Configuration=Release build/INSTALL.vcxproj
+
+    - name: Build on Windows x64
+      if: startsWith(matrix.os, 'windows')
+      run: |
+        cmake -G "Visual Studio 16 2019" -A x64 -B build64 -DCMAKE_INSTALL_PREFIX="dist64" -D64BIT=ON
+        msbuild -verbosity:normal /property:Configuration=Release /property:Platform=x64 build64/INSTALL.vcxproj
+
+    - name: Build on Windows with vgui
+      if: startsWith(matrix.os, 'windows')
+      run: |
+        cmake -G "Visual Studio 16 2019" -A Win32 -B build -DUSE_VGUI=ON -DCMAKE_INSTALL_PREFIX="dist-vgui"
+        msbuild -verbosity:normal /property:Configuration=Release build/INSTALL.vcxproj
+
+    - name: Build on Android with vgui
+      if: matrix.cc == 'aarch64-linux-android21-clang'
+      run: |
+        cmake -GNinja -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-21 -DCMAKE_BUILD_TYPE=Release -DPOLLY=ON -DUSE_VGUI=ON -B build-android-vgui -S .
+        ninja -C build-android-vgui
+        cmake --build build-android-vgui --target install
+
+    - name: Extract branch name
+      shell: bash
+      run: echo "branch=$(echo ${GITHUB_REF#refs/heads/} | tr '/' '_')" >> $GITHUB_OUTPUT
+      id: extract_branch
+
+    - name: Extract gamedir
+      shell: bash
+      run: echo "gamedir=$(grep build/CMakeCache.txt -Ee 'GAMEDIR:STRING=[a-z]+' | cut -d '=' -f 2)" >> $GITHUB_OUTPUT
+      id: extract_gamedir
+
+    - name: Upload linux artifact
+      if: startsWith(matrix.os, 'ubuntu') && matrix.cc == 'gcc'
+      uses: actions/upload-artifact@v4
+      with:
+        name: hlsdk-${{ steps.extract_branch.outputs.branch }}-linux
+        path: dist/${{ steps.extract_gamedir.outputs.gamedir }}
+
+    - name: Upload linux artifact with vgui
+      if: startsWith(matrix.os, 'ubuntu') && matrix.cc == 'gcc'
+      uses: actions/upload-artifact@v4
+      with:
+        name: hlsdk-${{ steps.extract_branch.outputs.branch }}-linux-vgui
+        path: dist-vgui/${{ steps.extract_gamedir.outputs.gamedir }}
+
+    - name: Upload windows artifact
+      if: startsWith(matrix.os, 'windows')
+      uses: actions/upload-artifact@v4
+      with:
+        name: hlsdk-${{ steps.extract_branch.outputs.branch }}-windows
+        path: dist/${{ steps.extract_gamedir.outputs.gamedir }}
+
+    - name: Upload windows x64 artifact
+      if: startsWith(matrix.os, 'windows')
+      uses: actions/upload-artifact@v4
+      with:
+        name: hlsdk-${{ steps.extract_branch.outputs.branch }}-windows_x64
+        path: dist64/${{ steps.extract_gamedir.outputs.gamedir }}
+
+    - name: Upload windows artifact with vgui
+      if: startsWith(matrix.os, 'windows')
+      uses: actions/upload-artifact@v4
+      with:
+        name: hlsdk-${{ steps.extract_branch.outputs.branch }}-windows-vgui
+        path: dist-vgui/${{ steps.extract_gamedir.outputs.gamedir }}
+
+    - name: Upload android artifact with vgui
+      if: matrix.cc == 'aarch64-linux-android21-clang'
+      uses: actions/upload-artifact@v4
+      with:
+        name: hlsdk-${{ steps.extract_branch.outputs.branch }}-android-vgui
+        path: build-android-vgui/${{ steps.extract_gamedir.outputs.gamedir }}
