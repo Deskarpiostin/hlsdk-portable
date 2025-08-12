@@ -8,12 +8,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: android
             cc: gcc
             cxx: g++
           - os: ubuntu-latest
-            cc: clang
-            cxx: clang++
+            targetos: android
+            targetarch: multiarch
           - os: windows-latest
             cc: cl
             cxx: cl
