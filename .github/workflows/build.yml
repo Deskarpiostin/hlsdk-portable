@@ -9,14 +9,17 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+          	targetos: android
             cc: gcc
             cxx: g++
           - os: ubuntu-latest
             cc: clang
             cxx: clang++
-          - os: windows-latest
-            cc: cl
-            cxx: cl
+          - os: ubuntu-latest
+          	targetos: android
+           	targetarch: multiarch
+            cc: gcc
+            cxx: g++
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
