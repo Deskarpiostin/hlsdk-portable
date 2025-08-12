@@ -9,15 +9,14 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-          	targetos: android
+            targetos: android
+            targetarch: multiarch
             cc: gcc
             cxx: g++
           - os: ubuntu-latest
             cc: clang
             cxx: clang++
           - os: ubuntu-latest
-          	targetos: android
-           	targetarch: multiarch
             cc: gcc
             cxx: g++
     env:
