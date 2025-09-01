@@ -184,7 +184,7 @@ void CShotgun::PrimaryAttack()
 	m_fInSpecialReload = 0;
 }
 
-void CShotgun::SecondaryAttack( void )
+/*void CShotgun::SecondaryAttack( void )
 {
 	// don't fire underwater
 	if( m_pPlayer->pev->waterlevel == 3 )
@@ -255,7 +255,7 @@ void CShotgun::SecondaryAttack( void )
 
 	m_fInSpecialReload = 0;
 }
-
+*/
 void CShotgun::Reload( void )
 {
 	if( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 || m_iClip == SHOTGUN_MAX_CLIP )
