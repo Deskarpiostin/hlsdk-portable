@@ -208,13 +208,13 @@ IMPLEMENT_SAVERESTORE( CHGrunt, CSquadMonster )
 
 const char *CHGrunt::pGruntSentences[] =
 {
-	"HG_GREN", // grenade scared grunt
-	"HG_ALERT", // sees player
-	"HG_MONSTER", // sees monster
-	"HG_COVER", // running to cover
-	"HG_THROW", // about to throw grenade
-	"HG_CHARGE",  // running out to get the enemy
-	"HG_TAUNT", // say rude things
+	"ALLYGRENADERUN", // grenade scared grunt
+	"ALLYPLAYER", // sees player
+	"ALLYMONSTER", // sees monster
+	"ALLYGO", // running to cover
+	"ALLYGRENADE", // about to throw grenade
+	"ALLYGO",  // running out to get the enemy
+	"ALLYEZ", // say rude things
 };
 
 typedef enum
@@ -690,17 +690,17 @@ void CHGrunt::IdleSound( void )
 			{
 			case 0:
 				// check in
-				SENTENCEG_PlayRndSz( ENT( pev ), "HG_CHECK", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, m_voicePitch );
+				SENTENCEG_PlayRndSz( ENT( pev ), "", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, m_voicePitch );
 				g_fGruntQuestion = 1;
 				break;
 			case 1:
 				// question
-				SENTENCEG_PlayRndSz( ENT( pev ), "HG_QUEST", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, m_voicePitch );
+				SENTENCEG_PlayRndSz( ENT( pev ), "", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, m_voicePitch );
 				g_fGruntQuestion = 2;
 				break;
 			case 2:
 				// statement
-				SENTENCEG_PlayRndSz( ENT( pev ), "HG_IDLE", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, m_voicePitch );
+				SENTENCEG_PlayRndSz( ENT( pev ), "", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, m_voicePitch );
 				break;
 			}
 		}
@@ -710,11 +710,11 @@ void CHGrunt::IdleSound( void )
 			{
 			case 1:
 				// check in
-				SENTENCEG_PlayRndSz( ENT( pev ), "HG_CLEAR", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, m_voicePitch );
+				SENTENCEG_PlayRndSz( ENT( pev ), "", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, m_voicePitch );
 				break;
 			case 2:
 				// question 
-				SENTENCEG_PlayRndSz( ENT( pev ), "HG_ANSWER", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, m_voicePitch );
+				SENTENCEG_PlayRndSz( ENT( pev ), "", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, m_voicePitch );
 				break;
 			}
 			g_fGruntQuestion = 0;
@@ -957,7 +957,7 @@ void CHGrunt::HandleAnimEvent( MonsterEvent_t *pEvent )
 		{
 			if( FOkToSpeak() )
 			{
-				SENTENCEG_PlayRndSz( ENT( pev ), "HG_ALERT", HGRUNT_SENTENCE_VOLUME, GRUNT_ATTN, 0, m_voicePitch );
+				SENTENCEG_PlayRndSz( ENT( pev ), "ALLYPLAYER", HGRUNT_SENTENCE_VOLUME, GRUNT_ATTN, 0, m_voicePitch );
 				JustSpoke();
 			}
 
@@ -1046,15 +1046,15 @@ void CHGrunt::Precache()
 	PRECACHE_SOUND( "hgrunt/gr_mgun1.wav" );
 	PRECACHE_SOUND( "hgrunt/gr_mgun2.wav" );
 	
-	PRECACHE_SOUND( "hgrunt/gr_die1.wav" );
-	PRECACHE_SOUND( "hgrunt/gr_die2.wav" );
-	PRECACHE_SOUND( "hgrunt/gr_die3.wav" );
+	PRECACHE_SOUND( "speech/opfor/death1.wav" );
+	PRECACHE_SOUND( "speech/opfor/death2.wav" );
+	PRECACHE_SOUND( "speech/opfor/death3.wav" );
 
-	PRECACHE_SOUND( "hgrunt/gr_pain1.wav" );
-	PRECACHE_SOUND( "hgrunt/gr_pain2.wav" );
-	PRECACHE_SOUND( "hgrunt/gr_pain3.wav" );
-	PRECACHE_SOUND( "hgrunt/gr_pain4.wav" );
-	PRECACHE_SOUND( "hgrunt/gr_pain5.wav" );
+	PRECACHE_SOUND( "speech/opfor/pain1.wav" );
+	PRECACHE_SOUND( "speech/opfor/pain2.wav" );
+	PRECACHE_SOUND( "speech/opfor/pain3.wav" );
+	PRECACHE_SOUND( "speech/opfor/pain4.wav" );
+	PRECACHE_SOUND( "speech/opfor/pain5.wav" );
 
 	PRECACHE_SOUND( "hgrunt/gr_reload1.wav" );
 
@@ -1159,7 +1159,7 @@ void CHGrunt::PainSound( void )
 			// pain sentences are rare
 			if( FOkToSpeak() )
 			{
-				SENTENCEG_PlayRndSz( ENT( pev ), "HG_PAIN", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, PITCH_NORM );
+				SENTENCEG_PlayRndSz( ENT( pev ), "ALLYPAIN", HGRUNT_SENTENCE_VOLUME, ATTN_NORM, 0, PITCH_NORM );
 				JustSpoke();
 				return;
 			}
@@ -1168,19 +1168,19 @@ void CHGrunt::PainSound( void )
 		switch( RANDOM_LONG( 0, 6 ) )
 		{
 		case 0:	
-			EMIT_SOUND( ENT( pev ), CHAN_VOICE, "hgrunt/gr_pain3.wav", 1, ATTN_NORM );	
+			EMIT_SOUND( ENT( pev ), CHAN_VOICE, "speech/opdor/pain3.wav", 1, ATTN_NORM );	
 			break;
 		case 1:
-			EMIT_SOUND( ENT( pev ), CHAN_VOICE, "hgrunt/gr_pain4.wav", 1, ATTN_NORM );	
+			EMIT_SOUND( ENT( pev ), CHAN_VOICE, "speech/opfor/pain4.wav", 1, ATTN_NORM );	
 			break;
 		case 2:
-			EMIT_SOUND( ENT( pev ), CHAN_VOICE, "hgrunt/gr_pain5.wav", 1, ATTN_NORM );	
+			EMIT_SOUND( ENT( pev ), CHAN_VOICE, "speech/opfor/pain5.wav", 1, ATTN_NORM );	
 			break;
 		case 3:
-			EMIT_SOUND( ENT( pev ), CHAN_VOICE, "hgrunt/gr_pain1.wav", 1, ATTN_NORM );	
+			EMIT_SOUND( ENT( pev ), CHAN_VOICE, "speech/opfor/pain1.wav", 1, ATTN_NORM );	
 			break;
 		case 4:
-			EMIT_SOUND( ENT( pev ), CHAN_VOICE, "hgrunt/gr_pain2.wav", 1, ATTN_NORM );	
+			EMIT_SOUND( ENT( pev ), CHAN_VOICE, "speech/opfor/pain2.wav", 1, ATTN_NORM );	
 			break;
 		}
 
@@ -1196,13 +1196,13 @@ void CHGrunt::DeathSound( void )
 	switch( RANDOM_LONG( 0, 2 ) )
 	{
 	case 0:
-		EMIT_SOUND( ENT( pev ), CHAN_VOICE, "hgrunt/gr_die1.wav", 1, ATTN_IDLE );	
+		EMIT_SOUND( ENT( pev ), CHAN_VOICE, "speech/opfor/death1.wav", 1, ATTN_IDLE );	
 		break;
 	case 1:
-		EMIT_SOUND( ENT( pev ), CHAN_VOICE, "hgrunt/gr_die2.wav", 1, ATTN_IDLE );	
+		EMIT_SOUND( ENT( pev ), CHAN_VOICE, "speech/opfor/death2.wav", 1, ATTN_IDLE );	
 		break;
 	case 2:
-		EMIT_SOUND( ENT( pev ), CHAN_VOICE, "hgrunt/gr_die3.wav", 1, ATTN_IDLE );	
+		EMIT_SOUND( ENT( pev ), CHAN_VOICE, "speech/opfor/death3.wav", 1, ATTN_IDLE );	
 		break;
 	}
 }
