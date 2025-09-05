@@ -47,19 +47,19 @@ LINK_ENTITY_TO_CLASS( laser_spot, CLaserSpot )
 //=========================================================
 CLaserSpot *CLaserSpot::CreateSpot( void )
 {
-	CLaserSpot *pSpot = GetClassPtr( (CLaserSpot *)NULL );
+/*	CLaserSpot *pSpot = GetClassPtr( (CLaserSpot *)NULL );
 	pSpot->Spawn();
 
 	pSpot->pev->classname = MAKE_STRING( "laser_spot" );
 
-	return pSpot;
+	return pSpot; */
 }
 
 //=========================================================
 //=========================================================
 void CLaserSpot::Spawn( void )
 {
-	Precache();
+/*	Precache();
 	pev->movetype = MOVETYPE_NONE;
 	pev->solid = SOLID_NOT;
 
@@ -68,7 +68,7 @@ void CLaserSpot::Spawn( void )
 	pev->renderamt = 255;
 
 	SET_MODEL( ENT( pev ), "sprites/laserdot.spr" );
-	UTIL_SetOrigin( pev, pev->origin );
+	UTIL_SetOrigin( pev, pev->origin ); */
 }
 
 //=========================================================
@@ -76,10 +76,10 @@ void CLaserSpot::Spawn( void )
 //=========================================================
 void CLaserSpot::Suspend( float flSuspendTime )
 {
-	pev->effects |= EF_NODRAW;
+/*	pev->effects |= EF_NODRAW;
 
 	SetThink( &CLaserSpot::Revive );
-	pev->nextthink = gpGlobals->time + flSuspendTime;
+	pev->nextthink = gpGlobals->time + flSuspendTime; */
 }
 
 //=========================================================
@@ -87,14 +87,14 @@ void CLaserSpot::Suspend( float flSuspendTime )
 //=========================================================
 void CLaserSpot::Revive( void )
 {
-	pev->effects &= ~EF_NODRAW;
+/*	pev->effects &= ~EF_NODRAW;
 
-	SetThink( NULL );
+	SetThink( NULL ); */
 }
 
 void CLaserSpot::Precache( void )
 {
-	PRECACHE_MODEL( "sprites/laserdot.spr" );
+//	PRECACHE_MODEL( "sprites/laserdot.spr" );
 }
 
 LINK_ENTITY_TO_CLASS( rpg_rocket, CRpgRocket )
@@ -380,7 +380,7 @@ void CRpg::Precache( void )
 
 	PRECACHE_SOUND( "items/9mmclip1.wav" );
 
-	UTIL_PrecacheOther( "laser_spot" );
+	// UTIL_PrecacheOther( "laser_spot" );
 	UTIL_PrecacheOther( "rpg_rocket" );
 
 	PRECACHE_SOUND( "weapons/rocketfire1.wav" );
