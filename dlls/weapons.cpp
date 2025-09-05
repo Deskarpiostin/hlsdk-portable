@@ -1619,7 +1619,7 @@ TYPEDESCRIPTION	CShotgun::m_SaveData[] =
 	// DEFINE_FIELD( CShotgun, m_iShell, FIELD_INTEGER ),
 	DEFINE_FIELD( CShotgun, m_flPumpTime, FIELD_TIME ),
 };
-
+/*
 IMPLEMENT_SAVERESTORE( CShotgun, CBasePlayerWeapon )
 
 TYPEDESCRIPTION	CGauss::m_SaveData[] =
@@ -1646,7 +1646,7 @@ TYPEDESCRIPTION	CEgon::m_SaveData[] =
 };
 
 IMPLEMENT_SAVERESTORE( CEgon, CBasePlayerWeapon )
-
+*/
 TYPEDESCRIPTION CHgun::m_SaveData[] =
 {
 	DEFINE_FIELD( CHgun, m_flRechargeTime, FIELD_TIME ),
