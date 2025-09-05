@@ -1049,14 +1049,28 @@ void CHGrunt::Precache()
 	PRECACHE_SOUND( "speech/opfor/death1.wav" );
 	PRECACHE_SOUND( "speech/opfor/death2.wav" );
 	PRECACHE_SOUND( "speech/opfor/death3.wav" );
+	PRECACHE_SOUND( "speech/opfor/death4.wav" );
+	PRECACHE_SOUND( "speech/opfor/death5.wav" );
+	PRECACHE_SOUND( "speech/opfor/death6.wav" );
 
 	PRECACHE_SOUND( "speech/opfor/pain1.wav" );
 	PRECACHE_SOUND( "speech/opfor/pain2.wav" );
 	PRECACHE_SOUND( "speech/opfor/pain3.wav" );
 	PRECACHE_SOUND( "speech/opfor/pain4.wav" );
 	PRECACHE_SOUND( "speech/opfor/pain5.wav" );
+	PRECACHE_SOUND( "speech/opfor/pain6.wav" );
 
 	PRECACHE_SOUND( "hgrunt/gr_reload1.wav" );
+
+	PRECACHE_SOUND( "speech/opfor/takecover.wav" );
+	PRECACHE_SOUND( "speech/opfor/go.wav" );
+	PRECACHE_SOUND( "speech/opfor/move.wav" );
+	PRECACHE_SOUND( "speech/opfor/moveup.wav" );
+	PRECACHE_SOUND( "speech/opfor/oneshot.wav" );
+	PRECACHE_SOUND( "speech/opfor/damage.wav" );
+	PRECACHE_SOUND( "speech/opfor/ass.wav" );
+	PRECACHE_SOUND( "speech/opfor/alien.wav" );
+	PRECACHE_SOUND( "speech/opfor/alert.wav" );
 
 	PRECACHE_SOUND( "weapons/glauncher.wav" );
 
