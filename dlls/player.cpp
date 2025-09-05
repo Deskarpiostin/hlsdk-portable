@@ -3001,6 +3001,20 @@ void CBasePlayer::Spawn( void )
 
 void CBasePlayer::Precache( void )
 {
+	PRECACHE_SOUND( "player/jump.wav" );
+	PRECACHE_SOUND( "player/pl_jump.wav" );
+	PRECACHE_SOUND( "player/h2odeath.wav" );
+	PRECACHE_SOUND( "player/pain1.wav" );
+	PRECACHE_SOUND( "player/pain2.wav" );
+	PRECACHE_SOUND( "player/pain3.wav" );
+	PRECACHE_SOUND( "player/pain4.wav" );
+	PRECACHE_SOUND( "player/pain5.wav" );
+	PRECACHE_SOUND( "player/pain6.wav" );
+	PRECACHE_SOUND( "player/death1.wav" );
+	PRECACHE_SOUND( "player/death2.wav" );
+	PRECACHE_SOUND( "player/death3.wav" );
+	PRECACHE_SOUND( "player/death4.wav" );
+	PRECACHE_SOUND( "player/death5.wav" );
 	// in the event that the player JUST spawned, and the level node graph
 	// was loaded, fix all of the node graph pointers before the game starts.
 
