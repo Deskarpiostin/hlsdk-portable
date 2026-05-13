@@ -977,12 +977,6 @@ private:
 	unsigned short m_usTripFire;
 };
 
-class CTripmineGrenade : public CBasePlayerWeapon
-{
-public:
-	BOOL IsSpawnMine( void );
-};
-
 class CSqueak : public CBasePlayerWeapon
 {
 public:
