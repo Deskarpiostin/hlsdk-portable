@@ -960,7 +960,6 @@ public:
 
 	void PrimaryAttack( void );
 	void SecondaryAttack( void );
-	BOOL IsSpawnMine( void );
 	BOOL Deploy( void );
 	void Holster( int skiplocal = 0 );
 	void WeaponIdle( void );
@@ -977,6 +976,12 @@ public:
 private:
 	unsigned short m_usTripFire;
 };
+
+class CTripmineGrenade : public CBasePlayerWeapon
+{
+public:
+	BOOL IsSpawnMine( void );
+}
 
 class CSqueak : public CBasePlayerWeapon
 {
