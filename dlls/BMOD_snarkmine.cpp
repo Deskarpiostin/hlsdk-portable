@@ -51,7 +51,7 @@ enum tripmine_e {
 	TRIPMINE_GROUND
 };
 
-LINK_ENTITY_TO_CLASS( monster_tripsnark, CTripSnarkGrenade );
+LINK_ENTITY_TO_CLASS( monster_snarkmine, CTripSnarkGrenade );
 
 TYPEDESCRIPTION	CTripSnarkGrenade::m_SaveData[] = 
 {
@@ -497,7 +497,7 @@ void DeactivateSnarkTrips( CBasePlayer *pOwner )
 {
 	edict_t *pFind; 
 
-	pFind = FIND_ENTITY_BY_CLASSNAME( NULL, "monster_tripsnark" );
+	pFind = FIND_ENTITY_BY_CLASSNAME( NULL, "monster_snarkmine" );
 
 	while ( !FNullEnt( pFind ) )
 	{
