@@ -22,6 +22,11 @@
 #include "player.h"
 #include "gamerules.h"
 
+// BMOD Begin - Flying Crowbar
+#include "BMOD_flyingcrowbar.h"
+#include "BMOD_messaging.h"
+// BMOD End - Flying Crowbar
+
 #define	CROWBAR_BODYHIT_VOLUME 128
 #define	CROWBAR_WALLHIT_VOLUME 512
 
@@ -68,6 +73,10 @@ void CCrowbar::Precache( void )
 	PRECACHE_SOUND( "weapons/cbar_hitbod3.wav" );
 	PRECACHE_SOUND( "weapons/cbar_miss1.wav" );
 
+	// BMOD Edit - Flying Crowbar
+	UTIL_PrecacheOther( "flying_crowbar" );
+	PRECACHE_MODEL( "models/w_weaponbox.mdl" );
+
 	m_usCrowbar = PRECACHE_EVENT( 1, "events/crowbar.sc" );
 }
 
@@ -100,6 +109,9 @@ int CCrowbar::AddToPlayer( CBasePlayer *pPlayer )
 
 BOOL CCrowbar::Deploy()
 {
+	// BMOD Edit - Modified crowbar message
+	PrintMessage( m_pPlayer, BMOD_CHAN_WEAPON, Vector( 20, 255, 20 ), Vector( 1, 4, 2 ), "\nCROWBAR\nSECONDARY FIRE: Throw crowbar." );
+
 	return DefaultDeploy( "models/v_crowbar.mdl", "models/p_crowbar.mdl", CROWBAR_DRAW, "crowbar" );
 }
 
@@ -240,6 +252,8 @@ int CCrowbar::Swing( int fFirst )
 		m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
 #if !CLIENT_DLL
+		int tempDamage = gSkillData.plrDmgCrowbar;
+
 		// hit
 		fDidHit = TRUE;
 		CBaseEntity *pEntity = CBaseEntity::Instance( tr.pHit );
@@ -261,12 +275,12 @@ int CCrowbar::Swing( int fFirst )
 #endif
 			{
 				// first swing does full damage
-				pEntity->TraceAttack( m_pPlayer->pev, gSkillData.plrDmgCrowbar, gpGlobals->v_forward, &tr, DMG_CLUB ); 
+				pEntity->TraceAttack( m_pPlayer->pev, tempDamage, gpGlobals->v_forward, &tr, DMG_CLUB ); 
 			}
 			else
 			{
 				// subsequent swings do half
-				pEntity->TraceAttack( m_pPlayer->pev, gSkillData.plrDmgCrowbar * 0.5f, gpGlobals->v_forward, &tr, DMG_CLUB ); 
+				pEntity->TraceAttack( m_pPlayer->pev, tempDamage * 0.5f, gpGlobals->v_forward, &tr, DMG_CLUB ); 
 			}
 			ApplyMultiDamage( m_pPlayer->pev, m_pPlayer->pev );
 
@@ -349,6 +363,55 @@ int CCrowbar::Swing( int fFirst )
 	return fDidHit;
 }
 
+// BMOD Begin - Flying Crowbar
+void CCrowbar::SecondaryAttack()
+{
+	// Don't throw underwater, and only throw if we were able to detatch 
+	// from player.
+	if( ( m_pPlayer->pev->waterlevel != 3 ) )//&& 
+        //( m_pPlayer->RemovePlayerItem( this ) ) )
+	{
+		// Get the origin, direction, and fix the angle of the throw.
+		Vector vecSrc = m_pPlayer->GetGunPosition() + gpGlobals->v_right * 8 + gpGlobals->v_forward * 16;
+
+		Vector vecDir = gpGlobals->v_forward;
+		Vector vecAng = UTIL_VecToAngles( vecDir );
+		vecAng.z = vecDir.z - 90;
+
+		// Create a flying crowbar.
+		CFlyingCrowbar *pFCBar = (CFlyingCrowbar *)Create( "flying_crowbar", vecSrc, Vector( 0, 0, 0 ), m_pPlayer->edict() );
+   
+		// Give the crowbar its velocity, angle, and spin.
+		// Lower the gravity a bit, so it flys.
+		pFCBar->pev->velocity = vecDir * 500 + m_pPlayer->pev->velocity;
+		pFCBar->pev->angles = vecAng;
+		pFCBar->pev->avelocity.x = -1000;
+		pFCBar->pev->gravity = .5;
+		pFCBar->m_pPlayer = m_pPlayer;
+
+		// Do player weapon anim and sound effect.
+		m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
+		EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_WEAPON, "weapons/cbar_miss1.wav", 1, ATTN_NORM, 0, 94 + RANDOM_LONG( 0, 0xF ) );
+
+		// Control the speed of the next crowbar toss if
+		// this is a rune.
+		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.5f;
+
+		// Crowbar Rune?
+		// Nope! take away the crowbar
+		m_pPlayer->RemovePlayerItem( this, TRUE );
+
+		// take item off hud
+		m_pPlayer->pev->weapons &= ~( 1 << this->m_iId );
+
+		// Destroy this weapon
+		DestroyItem();
+
+		// They no longer have an active item.
+		m_pPlayer->m_pActiveItem = NULL;
+	}
+}
+// BMOD End - Flying Crowbar
 #if CROWBAR_IDLE_ANIM
 void CCrowbar::WeaponIdle( void )
 {
@@ -378,3 +441,4 @@ void CCrowbar::WeaponIdle( void )
 	}
 }
 #endif
+

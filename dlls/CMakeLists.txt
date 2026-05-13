@@ -45,6 +45,10 @@ else()
 endif()
 
 set (SVDLL_SOURCES
+	BMOD_flyingcrowbar.cpp
+	BMOD_snarkmine.cpp
+	BMOD_messaging.cpp
+	BMOD_util.cpp
 	agrunt.cpp
 	airtank.cpp
 	aflock.cpp

@@ -22,7 +22,7 @@
 #include "player.h"
 #include "effects.h"
 #include "gamerules.h"
-
+#include "BMOD_messaging.h"
 #define	TRIPMINE_PRIMARY_VOLUME		450
 
 enum tripmine_e
@@ -430,6 +430,7 @@ int CTripmine::GetItemInfo( ItemInfo *p )
 
 BOOL CTripmine::Deploy()
 {
+	PrintMessage( m_pPlayer, BMOD_CHAN_WEAPON, Vector( 20, 250, 20 ), Vector( 1, 4, 2 ), "\nTRIPMINES\nSECONDAY FIRE: Place a snark mine." );
 	pev->body = 0;
 	return DefaultDeploy( "models/v_tripmine.mdl", "models/p_tripmine.mdl", TRIPMINE_DRAW, "trip" );
 }
@@ -502,6 +503,62 @@ void CTripmine::PrimaryAttack( void )
 	}*/
 
 	m_flNextPrimaryAttack = GetNextAttackDelay( 0.3 );
+	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
+}
+
+void CTripmine::SecondaryAttack( void )
+{
+	if( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
+		return;
+
+	UTIL_MakeVectors( m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle );
+	Vector vecSrc = m_pPlayer->GetGunPosition();
+	Vector vecAiming = gpGlobals->v_forward;
+
+	TraceResult tr;
+
+	UTIL_TraceLine( vecSrc, vecSrc + vecAiming * 128.0f, dont_ignore_monsters, ENT( m_pPlayer->pev ), &tr );
+
+	int flags;
+#if CLIENT_WEAPONS
+	flags = FEV_NOTHOST;
+#else
+	flags = 0;
+#endif
+	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usTripFire, 0.0f, g_vecZero, g_vecZero, 0.0f, 0.0f, 0, 0, m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] == 1, 0 );
+
+	if( tr.flFraction < 1.0f )
+	{
+		CBaseEntity *pEntity = CBaseEntity::Instance( tr.pHit );
+		if( pEntity && !( pEntity->pev->flags & FL_CONVEYOR ) )
+		{
+			Vector angles = UTIL_VecToAngles( tr.vecPlaneNormal );
+
+			CBaseEntity::Create( "monster_snarkmine", tr.vecEndPos + tr.vecPlaneNormal * 8.0f, angles, m_pPlayer->edict() );
+
+			m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
+
+			// player "shoot" animation
+			m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
+			
+			if( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
+			{
+				// no more mines! 
+				RetireWeapon();
+				return;
+			}
+		}
+		/*else
+		{
+			// ALERT( at_console, "no deploy\n" );
+		}*/
+	}
+	/*else
+	{
+
+	}*/
+
+	m_flNextSecondaryAttack = GetNextAttackDelay( 0.3 );
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
 }
 

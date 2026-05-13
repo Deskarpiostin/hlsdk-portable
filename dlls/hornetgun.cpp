@@ -140,7 +140,7 @@ void CHgun::PrimaryAttack()
 	float flRechargeTimePause = 0.5f;
 
 	if( g_pGameRules->IsMultiplayer() )
-		flRechargeTimePause = 0.3f;
+		flRechargeTimePause = 1.3f;
 
 	m_flRechargeTime = gpGlobals->time + flRechargeTimePause;
 #endif
@@ -160,11 +160,11 @@ void CHgun::PrimaryAttack()
 	// player "shoot" animation
 	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
-	m_flNextPrimaryAttack = m_flNextPrimaryAttack + 0.25f;
+	m_flNextPrimaryAttack = m_flNextPrimaryAttack + 0.5f;
 
 	if( m_flNextPrimaryAttack < UTIL_WeaponTimeBase() )
 	{
-		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.25f;
+		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.5f;
 	}
 
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );

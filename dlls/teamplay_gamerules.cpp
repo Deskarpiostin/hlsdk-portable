@@ -33,6 +33,9 @@ extern DLL_GLOBAL BOOL		g_fGameOver;
 
 CHalfLifeTeamplay::CHalfLifeTeamplay()
 {
+	SERVER_COMMAND( "mp_allowmonsters 1\n" );
+	SERVER_COMMAND( "mp_flashlight 1\n" );
+	SERVER_COMMAND( "allow_spectators 1\n" ); 
 	m_DisableDeathMessages = FALSE;
 	m_DisableDeathPenalty = FALSE;
 

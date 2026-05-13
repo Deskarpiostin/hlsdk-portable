@@ -77,6 +77,9 @@ CHalfLifeMultiplay::CHalfLifeMultiplay()
 #if !NO_VOICEGAMEMGR
 	g_VoiceGameMgr.Init( &g_GameMgrHelper, gpGlobals->maxClients );
 #endif
+	SERVER_COMMAND( "mp_allowmonsters 1\n" );
+	SERVER_COMMAND( "mp_flashlight 1\n" );
+	SERVER_COMMAND( "allow_spectators 1\n" ); 
 	RefreshSkillData();
 	m_flIntermissionEndTime = 0;
 	g_flIntermissionStartTime = 0;

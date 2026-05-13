@@ -72,8 +72,6 @@ void CMP5::Precache( void )
 
 	m_iShell = PRECACHE_MODEL( "models/shell.mdl" );// brass shellTE_MODEL
 
-	PRECACHE_MODEL( "models/grenade.mdl" );	// grenade
-
 	PRECACHE_MODEL( "models/w_9mmARclip.mdl" );
 	PRECACHE_SOUND( "items/9mmclip1.wav" );
 
@@ -83,9 +81,6 @@ void CMP5::Precache( void )
 	PRECACHE_SOUND( "weapons/hks1.wav" );// H to the K
 	PRECACHE_SOUND( "weapons/hks2.wav" );// H to the K
 	PRECACHE_SOUND( "weapons/hks3.wav" );// H to the K
-
-	PRECACHE_SOUND( "weapons/glauncher.wav" );
-	PRECACHE_SOUND( "weapons/glauncher2.wav" );
 
 	PRECACHE_SOUND( "weapons/357_cock1.wav" );
 
@@ -194,53 +189,6 @@ void CMP5::PrimaryAttack()
 
 void CMP5::SecondaryAttack( void )
 {
-	// don't fire underwater
-	if( m_pPlayer->pev->waterlevel == 3 )
-	{
-		PlayEmptySound( );
-		m_flNextPrimaryAttack = 0.15f;
-		return;
-	}
-
-	if( m_pPlayer->m_rgAmmo[m_iSecondaryAmmoType] == 0 )
-	{
-		PlayEmptySound();
-		return;
-	}
-
-	m_pPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;
-	m_pPlayer->m_iWeaponFlash = BRIGHT_GUN_FLASH;
-
-	m_pPlayer->m_iExtraSoundTypes = bits_SOUND_DANGER;
-	m_pPlayer->m_flStopExtraSoundTime = UTIL_WeaponTimeBase() + 0.2f;
-
-	m_pPlayer->m_rgAmmo[m_iSecondaryAmmoType]--;
-
-	// player "shoot" animation
-	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
-
- 	UTIL_MakeVectors( m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle );
-
-	// we don't add in player velocity anymore.
-	CGrenade::ShootContact( m_pPlayer->pev,
-					m_pPlayer->pev->origin + m_pPlayer->pev->view_ofs + gpGlobals->v_forward * 16.0f,
-					gpGlobals->v_forward * 800.0f );
-
-	int flags;
-#if CLIENT_WEAPONS
-	flags = FEV_NOTHOST;
-#else
-	flags = 0;
-#endif
-	PLAYBACK_EVENT( flags, m_pPlayer->edict(), m_usMP52 );
-
-	m_flNextPrimaryAttack = GetNextAttackDelay( 1.0f );
-	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1.0f;
-	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 5.0f;// idle pretty soon after shooting.
-
-	if( !m_pPlayer->m_rgAmmo[m_iSecondaryAmmoType] )
-		// HEV suit - indicate out of ammo condition
-		m_pPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
 }
 
 void CMP5::Reload( void )
@@ -329,31 +277,3 @@ class CMP5Chainammo : public CBasePlayerAmmo
 };
 
 LINK_ENTITY_TO_CLASS( ammo_9mmbox, CMP5Chainammo )
-
-class CMP5AmmoGrenade : public CBasePlayerAmmo
-{
-	void Spawn( void )
-	{
-		Precache();
-		SET_MODEL( ENT( pev ), "models/w_ARgrenade.mdl" );
-		CBasePlayerAmmo::Spawn();
-	}
-	void Precache( void )
-	{
-		PRECACHE_MODEL( "models/w_ARgrenade.mdl" );
-		PRECACHE_SOUND( "items/9mmclip1.wav" );
-	}
-	BOOL AddAmmo( CBaseEntity *pOther ) 
-	{ 
-		int bResult = ( pOther->GiveAmmo( AMMO_M203BOX_GIVE, "ARgrenades", M203_GRENADE_MAX_CARRY ) != -1 );
-
-		if( bResult )
-		{
-			EMIT_SOUND( ENT( pev ), CHAN_ITEM, "items/9mmclip1.wav", 1, ATTN_NORM );
-		}
-		return bResult;
-	}
-};
-
-LINK_ENTITY_TO_CLASS( ammo_mp5grenades, CMP5AmmoGrenade )
-LINK_ENTITY_TO_CLASS( ammo_ARgrenades, CMP5AmmoGrenade )

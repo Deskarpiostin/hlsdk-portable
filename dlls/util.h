@@ -570,4 +570,8 @@ int UTIL_SharedRandomLong( unsigned int seed, int low, int high );
 float UTIL_SharedRandomFloat( unsigned int seed, float low, float high );
 
 float UTIL_WeaponTimeBase( void );
+
+// BMOD Begin - Custom UTIL functions
+BOOL UTIL_OBB_LineTest( Vector vecSrc, Vector vecDst, Vector boxP, Vector boxE );
+// BMOD End - Custom UTIL functions
 #endif // UTIL_H

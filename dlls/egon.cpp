@@ -232,7 +232,7 @@ void CEgon::Attack( void )
 
 void CEgon::PrimaryAttack( void )
 {
-	m_fireMode = FIRE_WIDE;
+	m_fireMode = FIRE_NARROW;
 	Attack();
 }
 

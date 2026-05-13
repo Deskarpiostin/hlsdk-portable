@@ -353,7 +353,7 @@ void CRpg::Spawn()
 	m_iId = WEAPON_RPG;
 
 	SET_MODEL( ENT( pev ), "models/w_rpg.mdl" );
-	m_fSpotActive = 1;
+	m_fSpotActive = 0;
 
 #if CLIENT_DLL
 	if( bIsMultiplayer() )
@@ -458,6 +458,7 @@ void CRpg::Holster( int skiplocal /* = 0 */ )
 
 void CRpg::PrimaryAttack()
 {
+	m_fSpotActive = 0;
 	if( m_iClip )
 	{
 		m_pPlayer->m_iWeaponVolume = LOUD_GUN_VOLUME;
@@ -504,16 +505,6 @@ void CRpg::PrimaryAttack()
 
 void CRpg::SecondaryAttack()
 {
-	m_fSpotActive = !m_fSpotActive;
-
-#if !CLIENT_DLL
-	if( !m_fSpotActive && m_pSpot )
-	{
-		m_pSpot->Killed( NULL, GIB_NORMAL );
-		m_pSpot = NULL;
-	}
-#endif
-	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.2f;
 }
 
 void CRpg::WeaponIdle( void )
