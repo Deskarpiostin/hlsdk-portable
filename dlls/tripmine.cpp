@@ -266,7 +266,7 @@ void CTripmineGrenade::MakeBeam( void )
 	m_pBeam->SetScrollRate( 255 );
 	m_pBeam->SetBrightness( 64 );
 	
-	if (CTripmine::IsSpawnMine())
+	if (IsSpawnMine())
 	{
 		pev->owner = m_pRealOwner;
 		pev->health = 0;
@@ -277,7 +277,7 @@ void CTripmineGrenade::MakeBeam( void )
 	}
 }
 
-BOOL CTripmine::IsSpawnMine()
+BOOL CTripmineGrenade::IsSpawnMine()
 {
 	BOOL result = FALSE;
 
