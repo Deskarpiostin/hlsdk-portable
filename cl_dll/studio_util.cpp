@@ -5,9 +5,7 @@
 // $NoKeywords: $
 //=============================================================================
 
-#include "hud.h"
 #include "cl_util.h"
-#include "const.h"
 #include "com_model.h"
 #include "studio_util.h"
 #include "build.h"
@@ -17,6 +15,8 @@
 #include "neon_mathfun.h"
 #endif
 
+// this conflicts with definitions from pm_math.cpp
+#if XASH_SIMD_NEON
 /*
 ====================
 AngleMatrix
@@ -244,6 +244,7 @@ void ConcatTransforms( float in1[3][4], float in2[3][4], float out[3][4] )
 				in1[2][2] * in2[2][3] + in1[2][3];
 #endif
 }
+#endif
 
 // angles index are not the same as ROLL, PITCH, YAW
 

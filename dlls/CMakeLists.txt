@@ -25,13 +25,14 @@ project (SVDLL)
 
 set (SVDLL_LIBRARY server)
 
+add_definitions(-DSERVER_DLL)
+
 if(NOT MSVC)
 	add_compile_options(-fno-exceptions) # GCC/Clang flag
 	add_compile_options(-fno-rtti) # GCC/Clang flag
 	add_compile_options(-Wno-invalid-offsetof) # GCC/Clang flag
 	add_compile_options(-fvisibility=hidden) # GCC/Clang flag
-	add_definitions(-D_LINUX) # It seems enough for all non-Win32 systems
-	add_definitions(-Dstricmp=strcasecmp -Dstrnicmp=strncasecmp -D_snprintf=snprintf -D_vsnprintf=vsnprintf )
+	add_definitions(-Dstricmp=strcasecmp -Dstrnicmp=strncasecmp -D_vsnprintf=vsnprintf )
 	if(CMAKE_BUILD_TYPE MATCHES "Release"
 		OR (CMAKE_BUILD_TYPE MATCHES "RelWithDebInfo"
 		AND CMAKE_SYSTEM_NAME STREQUAL "Android"))
@@ -46,8 +47,12 @@ endif()
 
 set (SVDLL_SOURCES
 	agrunt.cpp
+	ai_debug.cpp
 	airtank.cpp
 	aflock.cpp
+	ammo_amounts.cpp
+	ammoregistry.cpp
+	ammunition.cpp
 	animating.cpp
 	animation.cpp
 	apache.cpp
@@ -55,21 +60,33 @@ set (SVDLL_SOURCES
 	barney.cpp
 	bigmomma.cpp
 	bloater.cpp
+	blood.cpp
 	bmodels.cpp
 	bullsquid.cpp
 	buttons.cpp
 	cbase.cpp
+	classify.cpp
 	client.cpp
 	combat.cpp
+	common_soundscripts.cpp
 	controller.cpp
 	crossbow.cpp
 	crowbar.cpp
 	defaultai.cpp
+	displacer.cpp
+	displacerball.cpp
 	doors.cpp
+	drillsergeant.cpp
+	eagle.cpp
 	effects.cpp
 	egon.cpp
+	ent_templates.cpp
 	explode.cpp
+	fgrunt.cpp
+	flybee.cpp
 	flyingmonster.cpp
+	followers.cpp
+	followingmonster.cpp
 	func_break.cpp
 	func_tank.cpp
 	game.cpp
@@ -77,10 +94,15 @@ set (SVDLL_SOURCES
 	gargantua.cpp
 	gauss.cpp
 	genericmonster.cpp
+	geneworm.cpp
 	ggrenade.cpp
 	globals.cpp
 	glock.cpp
 	gman.cpp
+	gonome.cpp
+	graphic_debug.cpp
+	grapple.cpp
+	grenadelauncher.cpp
 	h_ai.cpp
 	h_battery.cpp
 	h_cine.cpp
@@ -91,78 +113,122 @@ set (SVDLL_SOURCES
 	headcrab.cpp
 	healthkit.cpp
 	hgrunt.cpp
+	hwgrunt.cpp
 	hornet.cpp
 	hornetgun.cpp
 	houndeye.cpp
 	ichthyosaur.cpp
+	inventory.cpp
 	islave.cpp
 	items.cpp
+	kingpin.cpp
+	knife.cpp
 	leech.cpp
 	lights.cpp
+	locus.cpp
+	m249.cpp
+	mapconfig.cpp
 	maprules.cpp
+	massn.cpp
+	medkit.cpp
+	minigun.cpp
 	monstermaker.cpp
 	monsters.cpp
 	monsterstate.cpp
 	mortar.cpp
 	mp5.cpp
 	multiplay_gamerules.cpp
+	nailgun.cpp
 	nihilanth.cpp
 	nodes.cpp
+	nuclearbomb.cpp
+	objecthint_spec.cpp
 	observer.cpp
+	op4mortar.cpp
 	osprey.cpp
+	panthereye.cpp
 	pathcorner.cpp
+	pipewrench.cpp
+	pitdrone.cpp
+	pitworm.cpp
 	plane.cpp
 	plats.cpp
+	player_templates.cpp
 	player.cpp
 	playermonster.cpp
 	python.cpp
 	rat.cpp
+	rgrunt.cpp
+	recruit.cpp
 	roach.cpp
+	robocop.cpp
+	ropes.cpp
 	rpg.cpp
 	satchel.cpp
+	savetitles.cpp
 	schedule.cpp
 	scientist.cpp
 	scripted.cpp
+	shockbeam.cpp
+	shockrifle.cpp
+	shocktrooper.cpp
 	shotgun.cpp
 	singleplay_gamerules.cpp
 	skill.cpp
+	skilldata.cpp
+	sniperrifle.cpp
 	sound.cpp
 	soundent.cpp
 	spectator.cpp
+	spore.cpp
+	sporelauncher.cpp
 	squadmonster.cpp
 	squeakgrenade.cpp
 	subs.cpp
 	talkmonster.cpp
 	teamplay_gamerules.cpp
-	tempmonster.cpp
 	tentacle.cpp
+	tor.cpp
 	triggers.cpp
 	tripmine.cpp
 	turret.cpp
+	uzi.cpp
 	util.cpp
 	vehicle.cpp
+	visuals.cpp
+	visuals_utils.cpp
+	voltigore.cpp
+	warpball.cpp
 	weapons.cpp
+	weapons_shared.cpp
+	weapon_tools.cpp
 	world.cpp
 	xen.cpp
 	zombie.cpp
-	../pm_shared/pm_debug.c
-	../pm_shared/pm_math.c
-	../pm_shared/pm_shared.c
+	../pm_shared/pm_debug.cpp
+	../pm_shared/pm_math.cpp
+	../pm_shared/pm_shared.cpp
+	../game_shared/tex_materials.cpp
+	../game_shared/parsetext.cpp
+	../game_shared/error_collector.cpp
+	../game_shared/file_utils.cpp
+	../game_shared/fx_types.cpp
+	../game_shared/json_config.cpp
+	../game_shared/json_utils.cpp
+	../game_shared/random_utils.cpp
+	../game_shared/schema_definitions.cpp
+	../game_shared/schema_weapons.cpp
+	../game_shared/sound_channel.cpp
+	../game_shared/soundscripts.cpp
+	../game_shared/unicode.cpp
+	../game_shared/util_shared.cpp
+	../game_shared/weapon_parameters.cpp
+	../game_shared/weapon_templates.cpp
 	../public/safe_snprintf.c
 )
 
-if (HAVE_STRLCPY)
-	add_definitions(-DHAVE_STRLCPY)
-else()
-	list(APPEND SVDLL_SOURCES
-		../external/openbsd/strlcpy.c)
-endif()
-
-if (HAVE_STRLCAT)
-	add_definitions(-DHAVE_STRLCAT)
-else()
-	list(APPEND SVDLL_SOURCES
-		../external/openbsd/strlcat.c)
+if(NOT MSVC)
+	set_source_files_properties(ropes.cpp PROPERTIES COMPILE_FLAGS -O0)
 endif()
 
 include_directories (. wpn_shared ../common ../engine ../pm_shared ../game_shared ../public)
@@ -176,7 +242,7 @@ endif()
 if(USE_VOICEMGR)
 	set(SVDLL_SOURCES
 		${SVDLL_SOURCES}
-		../game_shared/voice_gamemgr.cpp)
+		voice_gamemgr.cpp)
 else()
 	add_definitions(-DNO_VOICEGAMEMGR)
 endif()

@@ -18,19 +18,15 @@
 // implementation of CHudHealth class
 //
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <cmath>
-
 #include "hud.h"
 #include "cl_util.h"
 #include "parsemsg.h"
-#include <string.h>
 
 #include "mobility_int.h"
 
 DECLARE_MESSAGE( m_Health, Health )
 DECLARE_MESSAGE( m_Health, Damage )
+DECLARE_MESSAGE( m_Health, Battery )
 
 #define PAIN_NAME "sprites/%d_pain.spr"
 #define DAMAGE_NAME "sprites/%d_dmg.spr"
@@ -47,17 +43,16 @@ int giDmgFlags[NUM_DMG_TYPES] =
 	DMG_NERVEGAS, 
 	DMG_RADIATION,
 	DMG_SHOCK,
-	DMG_CALTROP,
-	DMG_TRANQ,
-	DMG_CONCUSS,
-	DMG_HALLUC
 };
 
-int CHudHealth::Init( void )
+int CHudHealth::Init()
 {
 	HOOK_MESSAGE( Health );
 	HOOK_MESSAGE( Damage );
+	HOOK_MESSAGE( Battery );
+
 	m_iHealth = 100;
+	m_iMaxHealth = 100;
 	m_fFade = 0;
 	m_iFlags = 0;
 	m_bitsDamage = 0;
@@ -67,11 +62,15 @@ int CHudHealth::Init( void )
 
 	memset( m_dmg, 0, sizeof(DAMAGE_IMAGE) * NUM_DMG_TYPES );
 
+	m_iBat = 0;
+	m_iMaxBat = 100;
+	m_fArmorFade = 0;
+
 	gHUD.AddHudElem( this );
 	return 1;
 }
 
-void CHudHealth::Reset( void )
+void CHudHealth::Reset()
 {
 	// make sure the pain compass is cleared when the player respawns
 	m_fAttackFront = m_fAttackRear = m_fAttackRight = m_fAttackLeft = 0;
@@ -84,7 +83,7 @@ void CHudHealth::Reset( void )
 	}
 }
 
-int CHudHealth::VidInit( void )
+int CHudHealth::VidInit()
 {
 	m_hSprite = 0;
 
@@ -94,6 +93,11 @@ int CHudHealth::VidInit( void )
 	giDmgHeight = gHUD.GetSpriteRect( m_HUD_dmg_bio ).right - gHUD.GetSpriteRect( m_HUD_dmg_bio ).left;
 	giDmgWidth = gHUD.GetSpriteRect( m_HUD_dmg_bio ).bottom - gHUD.GetSpriteRect( m_HUD_dmg_bio ).top;
 
+	m_HUD_suit_empty = gHUD.GetSpriteIndex( "suit_empty" );
+	m_HUD_suit_full = gHUD.GetSpriteIndex( "suit_full" );
+
+	m_fArmorFade = 0;
+
 	return 1;
 }
 
@@ -101,7 +105,8 @@ int CHudHealth::MsgFunc_Health( const char *pszName, int iSize, void *pbuf )
 {
 	// TODO: update local health data
 	BEGIN_READ( pbuf, iSize );
-	int x = READ_BYTE();
+	int x = READ_SHORT();
+	m_iMaxHealth = READ_SHORT();
 
 	m_iFlags |= HUD_ACTIVE;
 
@@ -111,7 +116,6 @@ int CHudHealth::MsgFunc_Health( const char *pszName, int iSize, void *pbuf )
 		m_fFade = FADE_TIME;
 		m_iHealth = x;
 	}
-
 	return 1;
 }
 
@@ -123,10 +127,7 @@ int CHudHealth::MsgFunc_Damage( const char *pszName, int iSize, void *pbuf )
 	int damageTaken = READ_BYTE();	// health
 	long bitsDamage = READ_LONG(); // damage bits
 
-	vec3_t vecFrom;
-
-	for( int i = 0; i < 3; i++ )
-		vecFrom[i] = READ_COORD();
+	Vector vecFrom = READ_VECTOR();
 
 	UpdateTiles( gHUD.m_flTime, bitsDamage );
 
@@ -148,8 +149,37 @@ int CHudHealth::MsgFunc_Damage( const char *pszName, int iSize, void *pbuf )
 	return 1;
 }
 
+int CHudHealth::MsgFunc_Battery( const char *pszName,  int iSize, void *pbuf )
+{
+	m_iFlags |= HUD_ACTIVE;
+
+	BEGIN_READ( pbuf, iSize );
+	int x = READ_SHORT();
+	m_iMaxBat = READ_SHORT();
+
+	if( x != m_iBat )
+	{
+		m_fArmorFade = FADE_TIME;
+		m_iBat = x;
+	}
+
+	return 1;
+}
+
 // Returns back a color from the
 // Green <-> Yellow <-> Red ramp
+void CHudHealth::GetHealthColor( int &r, int &g, int &b )
+{
+	if( m_iHealth > 25 )
+	{
+		UnpackRGB( r, g, b, gHUD.HUDColor() );
+	}
+	else
+	{
+		UnpackRGB( r, g, b, gHUD.HUDColorCritical() );
+	}
+}
+
 void CHudHealth::GetPainColor( int &r, int &g, int &b )
 {
 #if 0
@@ -170,24 +200,37 @@ void CHudHealth::GetPainColor( int &r, int &g, int &b )
 	}
 	else
 	{
-		r = 250;
-		g = 0;
-		b = 0;
+		UnpackRGB( r, g, b, RGB_REDISH );
 	}
 #endif
 }
 
 int CHudHealth::Draw( float flTime )
 {
-	int r, g, b;
-	int a = 0, x, y;
-	int HealthWidth;
-
 	if( ( gHUD.m_iHideHUDDisplay & HIDEHUD_HEALTH ) || gEngfuncs.IsSpectateOnly() )
 		return 1;
 
 	if( !m_hSprite )
 		m_hSprite = LoadSprite( PAIN_NAME );
+
+	bool hasSuit = gHUD.HasSuit();
+
+	// Only draw health if we have the suit.
+	if (hasSuit || gHUD.DrawHUDNoSuit())
+	{
+		const bool drawArmor = m_iBat > 0 || hasSuit;
+		const int armorStartX = DrawHealth(drawArmor);
+		if (drawArmor)
+			DrawArmor(armorStartX);
+	}
+
+	DrawDamage( flTime );
+	return DrawPain( flTime );
+}
+
+int CHudHealth::DrawHealth(bool drawSeparator)
+{
+	int a = gHUD.MinHUDAlpha();
 
 	// Has health changed? Flash the health #
 	if( m_fFade )
@@ -195,56 +238,101 @@ int CHudHealth::Draw( float flTime )
 		m_fFade -= ( (float)gHUD.m_flTimeDelta * 20.0f );
 		if( m_fFade <= 0 )
 		{
-			a = MIN_ALPHA;
 			m_fFade = 0;
 		}
 
 		// Fade the health number back to dim
-		a = MIN_ALPHA + ( m_fFade / FADE_TIME ) * 128;
+		a += ( m_fFade / FADE_TIME ) * 128;
 	}
-	else
-		a = MIN_ALPHA;
 
 	// If health is getting low, make it bright red
 	if( m_iHealth <= 15 )
 		a = 255;
 
-	GetPainColor( r, g, b );
+	int r, g, b;
+	GetHealthColor( r, g, b );
 	ScaleColors( r, g, b, a );
 
-	// Only draw health if we have the suit.
-	if( gHUD.m_iWeaponBits & ( 1 << ( WEAPON_SUIT ) ) )
+	const int HealthWidth = gHUD.GetSpriteRect( gHUD.m_HUD_number_0 ).right - gHUD.GetSpriteRect( gHUD.m_HUD_number_0 ).left;
+	int CrossWidth = gHUD.GetSpriteRect( m_HUD_cross ).right - gHUD.GetSpriteRect( m_HUD_cross ).left;
+
+	int y = CHud::Renderer().PerceviedScreenHeight() - gHUD.m_iFontHeight - gHUD.m_iFontHeight / 2;
+	int x = CrossWidth / 2;
+
+	CHud::Renderer().SPR_DrawAdditive( gHUD.GetSprite( m_HUD_cross ), r, g, b, x, y, &gHUD.GetSpriteRect( m_HUD_cross ) );
+
+	x += CrossWidth;
+
+	const int digitFlag = m_iHealth >= 1000 ? DHN_4DIGITS : DHN_3DIGITS;
+	x = gHUD.DrawHudNumber( x, y + gHUD.m_iHudNumbersYOffset, digitFlag | DHN_DRAWZERO, m_iHealth, r, g, b );
+
+	x += HealthWidth / 2;
+
+	if (drawSeparator)
 	{
-		HealthWidth = gHUD.GetSpriteRect( gHUD.m_HUD_number_0 ).right - gHUD.GetSpriteRect( gHUD.m_HUD_number_0 ).left;
-		int CrossWidth = gHUD.GetSpriteRect( m_HUD_cross ).right - gHUD.GetSpriteRect( m_HUD_cross ).left;
-
-		y = ScreenHeight - gHUD.m_iFontHeight - gHUD.m_iFontHeight / 2;
-		x = CrossWidth / 2;
-
-		SPR_Set( gHUD.GetSprite( m_HUD_cross ), r, g, b );
-		SPR_DrawAdditive( 0, x, y, &gHUD.GetSpriteRect( m_HUD_cross ) );
-
-		x = CrossWidth + HealthWidth / 2;
-
-		x = gHUD.DrawHudNumber( x, y + gHUD.m_iHudNumbersYOffset, DHN_3DIGITS | DHN_DRAWZERO, m_iHealth, r, g, b );
-
-		x += HealthWidth / 2;
-
 		int iHeight = gHUD.m_iFontHeight;
 		int iWidth = HealthWidth / 10;
-		UnpackRGB( r, g, b, RGB_YELLOWISH );
-		FillRGBA( x, y + gHUD.m_iHudNumbersYOffset, iWidth, iHeight, r, g, b, a );
+		UnpackRGB( r, g, b, gHUD.HUDColor() );
+		CHud::Renderer().FillRGBA( x, y + gHUD.m_iHudNumbersYOffset, iWidth, iHeight, r, g, b, a );
 	}
 
-	DrawDamage( flTime );
-	return DrawPain( flTime );
+	return x + HealthWidth / 2;
 }
 
-void CHudHealth::CalcDamageDirection( vec3_t vecFrom )
+void CHudHealth::DrawArmor(int startX)
 {
-	vec3_t forward, right, up;
+	wrect_t suitEmptyRect = gHUD.GetSpriteRect(m_HUD_suit_empty);
+	wrect_t suitFullRect = gHUD.GetSpriteRect(m_HUD_suit_full);
+	const int batHeight = suitFullRect.bottom - suitEmptyRect.top;
+
+	wrect_t rc = suitFullRect;
+	rc.top  += batHeight * ( (float)( 100 - ( Q_min( 100, m_iBat ) ) ) * 0.01f );	// battery can go from 0 to 100 so * 0.01 goes from 0 to 1
+
+	int a = gHUD.MinHUDAlpha();
+
+	// Has health changed? Flash the health #
+	if( m_fArmorFade )
+	{
+		if( m_fArmorFade > FADE_TIME )
+			m_fArmorFade = FADE_TIME;
+
+		m_fArmorFade -= ( (float)gHUD.m_flTimeDelta * 20.0f );
+		if( m_fArmorFade <= 0 )
+		{
+			m_fArmorFade = 0;
+		}
+
+		// Fade the health number back to dim
+		a += ( m_fArmorFade / FADE_TIME ) * 128;
+	}
+
+	int r, g, b;
+	UnpackRGB( r, g, b, gHUD.HUDColor() );
+	ScaleColors( r, g, b, a );
+
+	int iOffset = ( suitEmptyRect.bottom - suitEmptyRect.top ) / 6;
+
+	int y = CHud::Renderer().PerceviedScreenHeight() - gHUD.m_iFontHeight - gHUD.m_iFontHeight / 2;
+	int x = gHUD.DrawArmorNearHealth() ? startX : CHud::Renderer().PerceviedScreenWidth() / 5;
+
+	CHud::Renderer().SPR_DrawAdditive( gHUD.GetSprite(m_HUD_suit_empty), r, g, b,  x, y - iOffset, &suitEmptyRect );
+
+	if( rc.bottom > rc.top )
+	{
+		CHud::Renderer().SPR_DrawAdditive( gHUD.GetSprite(m_HUD_suit_full), r, g, b, x, y - iOffset + ( rc.top - suitFullRect.top ), &rc );
+	}
+
+	x += ( suitEmptyRect.right - suitEmptyRect.left );
+
+	const int digitFlag = m_iBat >= 1000 ? DHN_4DIGITS : DHN_3DIGITS;
+	x = gHUD.DrawHudNumber( x, y + gHUD.m_iHudNumbersYOffset, digitFlag | DHN_DRAWZERO, m_iBat, r, g, b );
+}
+
+void CHudHealth::CalcDamageDirection( Vector vecFrom )
+{
+	Vector forward, right, up;
 	float side, front;
-	vec3_t vecOrigin, vecAngles;
+	Vector vecOrigin, vecAngles;
 
 	if( !vecFrom[0] && !vecFrom[1] && !vecFrom[2] )
 	{
@@ -252,14 +340,13 @@ void CHudHealth::CalcDamageDirection( vec3_t vecFrom )
 		return;
 	}
 
-	memcpy( vecOrigin, gHUD.m_vecOrigin, sizeof(vec3_t) );
-	memcpy( vecAngles, gHUD.m_vecAngles, sizeof(vec3_t) );
+	memcpy( vecOrigin, gHUD.m_vecOrigin, sizeof(Vector) );
+	memcpy( vecAngles, gHUD.m_vecAngles, sizeof(Vector) );
 
 	VectorSubtract( vecFrom, vecOrigin, vecFrom );
 
-	float flDistToTarget = vecFrom.Length();
+	float flDistToTarget = vecFrom.NormalizeInPlace();
 
-	vecFrom = vecFrom.Normalize();
 	AngleVectors( vecAngles, forward, right, up );
 
 	front = DotProduct( vecFrom, right );
@@ -381,7 +468,7 @@ int CHudHealth::DrawDamage( float flTime )
 	if( !m_bitsDamage )
 		return 1;
 
-	UnpackRGB( r, g, b, RGB_YELLOWISH );
+	UnpackRGB( r, g, b, gHUD.HUDColor() );
 
 	a = (int)( fabs( sin( flTime * 2.0f ) ) * 256.0f );
 
@@ -395,8 +482,7 @@ int CHudHealth::DrawDamage( float flTime )
 			pdmg = &m_dmg[i];
 
 			// Draw all the items
-			SPR_Set( gHUD.GetSprite( m_HUD_dmg_bio + i ), r, g, b );
-			SPR_DrawAdditive( 0, pdmg->x, pdmg->y, &gHUD.GetSpriteRect( m_HUD_dmg_bio + i ) );
+			CHud::Renderer().SPR_DrawAdditive( gHUD.GetSprite( m_HUD_dmg_bio + i ), r, g, b, pdmg->x, pdmg->y, &gHUD.GetSpriteRect( m_HUD_dmg_bio + i ) );
 
 			pdmg->fExpire = Q_min( flTime + DMG_IMAGE_LIFE, pdmg->fExpire );
 
@@ -449,7 +535,7 @@ void CHudHealth::UpdateTiles( float flTime, long bitsDamage )
 		{
 			// put this one at the bottom
 			pdmg->x = giDmgWidth / 8;
-			pdmg->y = ScreenHeight - giDmgHeight * 2;
+			pdmg->y = CHud::Renderer().PerceviedScreenHeight() - giDmgHeight * 2;
 			pdmg->fExpire=flTime + DMG_IMAGE_LIFE;
 
 			// move everyone else up

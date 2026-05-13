@@ -19,8 +19,13 @@
 #if !defined(AMMOHISTORY_H)
 #define AMMOHISTORY_H
 
+#include "ammo.h"
+#include "bucket_preferences.h"
+
+#include <cstdint>
+
 // this is the max number of items in each bucket
-#define MAX_WEAPON_POSITIONS		MAX_WEAPON_SLOTS
+#define MAX_WEAPON_POSITIONS		10
 
 class WeaponsResource
 {
@@ -29,32 +34,21 @@ private:
 	WEAPON		rgWeapons[MAX_WEAPONS];	// Weapons Array
 
 	// counts of weapons * ammo
-	WEAPON*		rgSlots[MAX_WEAPON_SLOTS + 1][MAX_WEAPON_POSITIONS + 1];	// The slots currently in use by weapons.  The value is a pointer to the weapon;  if it's NULL, no weapon is there
+	WEAPON*		rgSlots[WEAPON_SLOTS_HARDLIMIT][MAX_WEAPON_POSITIONS + 1];	// The slots currently in use by weapons.  The value is a pointer to the weapon;  if it's NULL, no weapon is there
 	int			riAmmo[MAX_AMMO_TYPES];					// count of each ammo type
 
+	WEAPON*	weaponTable[WEAPON_SLOTS_HARDLIMIT][MAX_WEAPON_POSITIONS + 1]; // Unlike rgSlots this is always filled with registered weapons
+	BucketPreferenceSet bucketPreferences;
 public:
-	void Init( void )
-	{
-		memset( rgWeapons, 0, sizeof rgWeapons );
-		Reset();
-	}
+	void Init();
 
-	void Reset( void )
-	{
-		iOldWeaponBits = 0;
-		memset( rgSlots, 0, sizeof rgSlots );
-		memset( riAmmo, 0, sizeof riAmmo );
-	}
+	void Reset();
 
 ///// WEAPON /////
-	int			iOldWeaponBits;
+	std::uint64_t iOldWeaponBits;
 
 	WEAPON *GetWeapon( int iId ) { return &rgWeapons[iId]; }
-	void AddWeapon( WEAPON *wp ) 
-	{ 
-		rgWeapons[wp->iId] = *wp;	
-		LoadWeaponSprites( &rgWeapons[wp->iId] );
-	}
+	void AddWeapon( WEAPON *wp );
 
 	void PickupWeapon( WEAPON *wp )
 	{
@@ -66,7 +60,7 @@ public:
 		rgSlots[wp->iSlot][wp->iSlotPos] = NULL;
 	}
 
-	void DropAllWeapons( void )
+	void DropAllWeapons()
 	{
 		for( int i = 0; i < MAX_WEAPONS; i++ )
 		{
@@ -78,7 +72,7 @@ public:
 	WEAPON* GetWeaponSlot( int slot, int pos ) { return rgSlots[slot][pos]; }
 
 	void LoadWeaponSprites( WEAPON* wp );
-	void LoadAllWeaponSprites( void );
+	void LoadAllWeaponSprites();
 	WEAPON* GetFirstPos( int iSlot );
 	void SelectSlot( int iSlot, int fAdvance, int iDirection );
 	WEAPON* GetNextActivePos( int iSlot, int iSlotPos );
@@ -93,6 +87,8 @@ public:
 	int CountAmmo( int iId );
 
 	HSPRITE* GetAmmoPicFromWeapon( int iAmmoId, wrect_t& rect );
+
+	int m_maxWeaponSlots;
 };
 
 extern WeaponsResource gWR;
@@ -113,18 +109,21 @@ private:
 		float DisplayTime;  // the time at which this item should be removed from the history
 		int iCount;
 		int iId;
+		int packedColor;
 	};
 
 	HIST_ITEM rgAmmoHistory[MAX_HISTORY];
 
+	void ScaleColorsAccordingToDisplayTime(float displayTime, float flTime, int& r, int& g, int& b);
+
 public:
 
-	void Init( void )
+	void Init()
 	{
 		Reset();
 	}
 
-	void Reset( void )
+	void Reset()
 	{
 		memset( rgAmmoHistory, 0, sizeof rgAmmoHistory );
 		iCurrentHistorySlot = 0;
@@ -134,9 +133,9 @@ public:
 	int iCurrentHistorySlot;
 
 	void AddToHistory( int iType, int iId, int iCount = 0 );
-	void AddToHistory( int iType, const char *szName, int iCount = 0 );
+	void AddToHistory(int iType, const char *szName, int iCount = 0, int packedColor = 0);
 
-	void CheckClearHistory( void );
+	void CheckClearHistory();
 	int DrawAmmoHistory( float flTime );
 };
 

@@ -17,6 +17,13 @@
 #include "cbase.h"
 #include "animation.h"
 #include "effects.h"
+#include "common_soundscripts.h"
+#include "visuals_utils.h"
+
+#define SF_XEN_PLANT_DROP_TO_FLOOR 2
+#define SF_XEN_PLANT_NONSOLID 8
+
+#define SF_XEN_PLANT_LIGHT_IGNORE_PLAYER 64
 
 #define XEN_PLANT_GLOW_SPRITE		"sprites/flare3.spr"
 #define XEN_PLANT_HIDE_TIME			5
@@ -25,14 +32,16 @@ class CActAnimating : public CBaseAnimating
 {
 public:
 	void SetActivity( Activity act );
-	inline Activity	GetActivity( void ) { return m_Activity; }
+	inline Activity	GetActivity() { return m_Activity; }
 
-	virtual int ObjectCaps( void ) { return CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
+	int ObjectCaps() override { return CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
 
-	virtual int Save( CSave &save );
-	virtual int Restore( CRestore &restore );
+	int Save( CSave &save ) override;
+	int Restore( CRestore &restore ) override;
 	static TYPEDESCRIPTION m_SaveData[];
 
+protected:
+	void DropToFloor();
 private:
 	Activity m_Activity;
 };
@@ -56,21 +65,31 @@ void CActAnimating::SetActivity( Activity act )
 	}
 }
 
+void CActAnimating::DropToFloor()
+{
+	if( DROP_TO_FLOOR(ENT( pev ) ) == 0 )
+	{
+		ALERT(at_error, "Item %s fell out of level at %f,%f,%f\n", STRING( pev->classname ), pev->origin.x, pev->origin.y, pev->origin.z);
+		UTIL_Remove( this );
+	}
+}
+
 class CXenPLight : public CActAnimating
 {
 public:
-	void Spawn( void );
-	void Precache( void );
-	void Touch( CBaseEntity *pOther );
-	void Think( void );
+	void Spawn() override;
+	void Precache() override;
+	void Touch( CBaseEntity *pOther ) override;
+	void Think() override;
 
-	void LightOn( void );
-	void LightOff( void );
+	void LightOn();
+	void LightOff();
 
-	virtual int Save( CSave &save );
-	virtual int Restore( CRestore &restore );
+	int Save( CSave &save ) override;
+	int Restore( CRestore &restore ) override;
 	static TYPEDESCRIPTION m_SaveData[];
 
+	static const NamedVisual glowVisual;
 private:
 	CSprite *m_pGlow;
 };
@@ -84,12 +103,22 @@ TYPEDESCRIPTION	CXenPLight::m_SaveData[] =
 
 IMPLEMENT_SAVERESTORE( CXenPLight, CActAnimating )
 
-void CXenPLight::Spawn( void )
+const NamedVisual CXenPLight::glowVisual = BuildVisual("XenLight.Glow")
+		.Model(XEN_PLANT_GLOW_SPRITE)
+		.RenderMode(kRenderGlow);
+
+void CXenPLight::Spawn()
 {
 	Precache();
 
-	SET_MODEL( ENT( pev ), "models/light.mdl" );
+	SetMyModel("models/light.mdl");
 	pev->movetype = MOVETYPE_NONE;
+
+	if (FBitSet(pev->spawnflags, SF_XEN_PLANT_DROP_TO_FLOOR))
+	{
+		DropToFloor();
+	}
+
 	pev->solid = SOLID_TRIGGER;
 
 	UTIL_SetSize( pev, Vector( -80, -80, 0 ), Vector( 80, 80, 32 ) );
@@ -97,18 +126,38 @@ void CXenPLight::Spawn( void )
 	pev->nextthink = gpGlobals->time + 0.1f;
 	pev->frame = RANDOM_FLOAT( 0, 255 );
 
-	m_pGlow = CSprite::SpriteCreate( XEN_PLANT_GLOW_SPRITE, pev->origin + Vector( 0, 0, ( pev->mins.z + pev->maxs.z ) * 0.5f ), FALSE );
-	m_pGlow->SetTransparency( kRenderGlow, (int)pev->rendercolor.x, (int)pev->rendercolor.y, (int)pev->rendercolor.z, (int)pev->renderamt, (int)pev->renderfx );
-	m_pGlow->SetAttachment( edict(), 1 );
+	if (FBitSet(pev->flags, FL_KILLME))
+		return;
+
+	const Visual* pGlow = GetVisual(glowVisual);
+	if (pGlow)
+	{
+		Visual glow = *pGlow;
+		if (!glow.HasDefined(Visual::COLOR_DEFINED))
+		{
+			glow.SetColor(Color3((int)pev->rendercolor.x, (int)pev->rendercolor.y, (int)pev->rendercolor.z));
+		}
+		if (!glow.HasDefined(Visual::ALPHA_DEFINED))
+		{
+			glow.SetAlpha((int)pev->renderamt);
+		}
+		if (!glow.HasDefined(Visual::RENDERFX_DEFINED))
+		{
+			glow.SetRenderFx(pev->renderfx);
+		}
+		m_pGlow = CreateSpriteFromVisual(&glow, pev->origin + Vector( 0, 0, ( pev->mins.z + pev->maxs.z ) * 0.5f ));
+		if (m_pGlow)
+			m_pGlow->SetAttachment( edict(), 1 );
+	}
 }
 
-void CXenPLight::Precache( void )
+void CXenPLight::Precache()
 {
-	PRECACHE_MODEL( "models/light.mdl" );
-	PRECACHE_MODEL( XEN_PLANT_GLOW_SPRITE );
+	PrecacheMyModel("models/light.mdl");
+	RegisterVisual(glowVisual);
 }
 
-void CXenPLight::Think( void )
+void CXenPLight::Think()
 {
 	StudioFrameAdvance();
 	pev->nextthink = gpGlobals->time + 0.1f;
@@ -141,7 +190,7 @@ void CXenPLight::Think( void )
 
 void CXenPLight::Touch( CBaseEntity *pOther )
 {
-	if( pOther->IsPlayer() )
+	if( !FBitSet(pev->spawnflags, SF_XEN_PLANT_LIGHT_IGNORE_PLAYER) && pOther->IsPlayer() )
 	{
 		pev->dmgtime = gpGlobals->time + XEN_PLANT_HIDE_TIME;
 		if( GetActivity() == ACT_IDLE || GetActivity() == ACT_STAND )
@@ -151,16 +200,16 @@ void CXenPLight::Touch( CBaseEntity *pOther )
 	}
 }
 
-void CXenPLight::LightOn( void )
+void CXenPLight::LightOn()
 {
-	SUB_UseTargets( this, USE_ON, 0 );
+	SUB_UseTargets( this, USE_ON );
 	if( m_pGlow )
 		m_pGlow->pev->effects &= ~EF_NODRAW;
 }
 
-void CXenPLight::LightOff( void )
+void CXenPLight::LightOff()
 {
-	SUB_UseTargets( this, USE_OFF, 0 );
+	SUB_UseTargets( this, USE_OFF );
 	if( m_pGlow )
 		m_pGlow->pev->effects |= EF_NODRAW;
 }
@@ -168,19 +217,19 @@ void CXenPLight::LightOff( void )
 class CXenHair : public CActAnimating
 {
 public:
-	void Spawn( void );
-	void Precache( void );
-	void Think( void );
+	void Spawn() override;
+	void Precache() override;
+	void Think() override;
 };
 
 LINK_ENTITY_TO_CLASS( xen_hair, CXenHair )
 
 #define SF_HAIR_SYNC		0x0001
 
-void CXenHair::Spawn( void )
+void CXenHair::Spawn()
 {
 	Precache();
-	SET_MODEL( edict(), "models/hair.mdl" );
+	SetMyModel("models/hair.mdl");
 	UTIL_SetSize( pev, Vector( -4, -4, 0 ), Vector( 4, 4, 32 ) );
 	pev->sequence = 0;
 
@@ -194,23 +243,28 @@ void CXenHair::Spawn( void )
 	pev->solid = SOLID_NOT;
 	pev->movetype = MOVETYPE_NONE;
 	pev->nextthink = gpGlobals->time + RANDOM_FLOAT( 0.1f, 0.4f );	// Load balance these a bit
+
+	if (FBitSet(pev->spawnflags, SF_XEN_PLANT_DROP_TO_FLOOR))
+	{
+		DropToFloor();
+	}
 }
 
-void CXenHair::Think( void )
+void CXenHair::Think()
 {
 	StudioFrameAdvance();
 	pev->nextthink = gpGlobals->time + 0.5f;
 }
 
-void CXenHair::Precache( void )
+void CXenHair::Precache()
 {
-	PRECACHE_MODEL( "models/hair.mdl" );
+	PrecacheMyModel( "models/hair.mdl" );
 }
 
 class CXenTreeTrigger : public CBaseEntity
 {
 public:
-	void Touch( CBaseEntity *pOther );
+	void Touch( CBaseEntity *pOther ) override;
 	static CXenTreeTrigger *TriggerCreate( edict_t *pOwner, const Vector &position );
 };
 
@@ -233,7 +287,8 @@ void CXenTreeTrigger::Touch( CBaseEntity *pOther )
 	if( pev->owner )
 	{
 		CBaseEntity *pEntity = CBaseEntity::Instance( pev->owner );
-		pEntity->Touch( pOther );
+		if (pEntity)
+			pEntity->Touch( pOther );
 	}
 }
 
@@ -242,21 +297,21 @@ void CXenTreeTrigger::Touch( CBaseEntity *pOther )
 class CXenTree : public CActAnimating
 {
 public:
-	void Spawn( void );
-	void Precache( void );
-	void Touch( CBaseEntity *pOther );
-	void Think( void );
-	int TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType ) { Attack(); return 0; }
-	void HandleAnimEvent( MonsterEvent_t *pEvent );
-	void Attack( void );	
-	int Classify( void ) { return CLASS_BARNACLE; }
+	void Spawn() override;
+	void Precache() override;
+	void Touch( CBaseEntity *pOther ) override;
+	void Think() override;
+	TakeDamageResult TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, const DamageInfo& damageInfo ) override { Attack(); return TakeDamageResult(); }
+	void HandleAnimEvent( MonsterEvent_t *pEvent ) override;
+	void Attack();
+	int DefaultClassify() override { return CLASS_BARNACLE; }
 
-	virtual int Save( CSave &save );
-	virtual int Restore( CRestore &restore );
+	int Save( CSave &save ) override;
+	int Restore( CRestore &restore ) override;
 	static TYPEDESCRIPTION m_SaveData[];
 
-	static const char *pAttackHitSounds[];
-	static const char *pAttackMissSounds[];
+	static constexpr const char* attackHitSoundScript = "XenTree.AttackHit";
+	static constexpr const char* attackMissSoundScript = "XenTree.AttackMiss";
 
 private:
 	CXenTreeTrigger	*m_pTrigger;
@@ -271,13 +326,13 @@ TYPEDESCRIPTION	CXenTree::m_SaveData[] =
 
 IMPLEMENT_SAVERESTORE( CXenTree, CActAnimating )
 
-void CXenTree::Spawn( void )
+void CXenTree::Spawn()
 {
 	Precache();
 
-	SET_MODEL( ENT( pev ), "models/tree.mdl" );
+	SetMyModel("models/tree.mdl");
 	pev->movetype = MOVETYPE_NONE;
-	pev->solid = SOLID_BBOX;
+	pev->solid = FBitSet(pev->spawnflags, SF_XEN_PLANT_NONSOLID) ? SOLID_NOT : SOLID_BBOX;
 
 	pev->takedamage = DAMAGE_YES;
 
@@ -287,6 +342,14 @@ void CXenTree::Spawn( void )
 	pev->frame = RANDOM_FLOAT( 0, 255 );
 	pev->framerate = RANDOM_FLOAT( 0.7f, 1.4f );
 
+	if (FBitSet(pev->spawnflags, SF_XEN_PLANT_DROP_TO_FLOOR))
+	{
+		DropToFloor();
+	}
+
+	if (FBitSet(pev->flags, FL_KILLME))
+		return;
+
 	Vector triggerPosition;
 	UTIL_MakeVectorsPrivate( pev->angles, triggerPosition, NULL, NULL );
 	triggerPosition = pev->origin + ( triggerPosition * 64 );
@@ -295,25 +358,11 @@ void CXenTree::Spawn( void )
 	UTIL_SetSize( m_pTrigger->pev, Vector( -24, -24, 0 ), Vector( 24, 24, 128 ) );
 }
 
-const char *CXenTree::pAttackHitSounds[] =
+void CXenTree::Precache()
 {
-	"zombie/claw_strike1.wav",
-	"zombie/claw_strike2.wav",
-	"zombie/claw_strike3.wav",
-};
-
-const char *CXenTree::pAttackMissSounds[] =
-{
-	"zombie/claw_miss1.wav",
-	"zombie/claw_miss2.wav",
-};
-
-void CXenTree::Precache( void )
-{
-	PRECACHE_MODEL( "models/tree.mdl" );
-	PRECACHE_MODEL( XEN_PLANT_GLOW_SPRITE );
-	PRECACHE_SOUND_ARRAY( pAttackHitSounds );
-	PRECACHE_SOUND_ARRAY( pAttackMissSounds );
+	PrecacheMyModel( "models/tree.mdl" );
+	RegisterAndPrecacheSoundScript(attackHitSoundScript, NPC::attackHitSoundScript);
+	RegisterAndPrecacheSoundScript(attackMissSoundScript, NPC::attackMissSoundScript);
 }
 
 void CXenTree::Touch( CBaseEntity *pOther )
@@ -324,13 +373,13 @@ void CXenTree::Touch( CBaseEntity *pOther )
 	Attack();
 }
 
-void CXenTree::Attack( void )
+void CXenTree::Attack()
 {
 	if( GetActivity() == ACT_IDLE )
 	{
 		SetActivity( ACT_MELEE_ATTACK1 );
 		pev->framerate = RANDOM_FLOAT( 1.0f, 1.4f );
-		EMIT_SOUND_ARRAY_DYN( CHAN_WEAPON, pAttackMissSounds );
+		EmitSoundScript(attackMissSoundScript);
 	}
 }
 
@@ -341,7 +390,7 @@ void CXenTree::HandleAnimEvent( MonsterEvent_t *pEvent )
 		case TREE_AE_ATTACK:
 		{
 			CBaseEntity *pList[8];
-			BOOL sound = FALSE;
+			bool sound = false;
 			int count = UTIL_EntitiesInBox( pList, 8, m_pTrigger->pev->absmin, m_pTrigger->pev->absmax, FL_MONSTER | FL_CLIENT );
 			Vector forward;
 
@@ -353,8 +402,8 @@ void CXenTree::HandleAnimEvent( MonsterEvent_t *pEvent )
 				{
 					if( pList[i]->pev->owner != edict() )
 					{
-						sound = TRUE;
-						pList[i]->TakeDamage( pev, pev, 25, DMG_CRUSH | DMG_SLASH );
+						sound = true;
+						pList[i]->TakeDamage( pev, pev, DamageInfo(25, DMG_CRUSH | DMG_SLASH) );
 						pList[i]->pev->punchangle.x = 15;
 						pList[i]->pev->velocity = pList[i]->pev->velocity + forward * 100;
 					}
@@ -363,7 +412,7 @@ void CXenTree::HandleAnimEvent( MonsterEvent_t *pEvent )
 
 			if( sound )
 			{
-				EMIT_SOUND_ARRAY_DYN( CHAN_WEAPON, pAttackHitSounds );
+				EmitSoundScript(attackHitSoundScript);
 			}
 		}
 		return;
@@ -372,7 +421,7 @@ void CXenTree::HandleAnimEvent( MonsterEvent_t *pEvent )
 	CActAnimating::HandleAnimEvent( pEvent );
 }
 
-void CXenTree::Think( void )
+void CXenTree::Think()
 {
 	float flInterval = StudioFrameAdvance();
 	pev->nextthink = gpGlobals->time + 0.1f;
@@ -403,30 +452,40 @@ void CXenTree::Think( void )
 class CXenSpore : public CActAnimating
 {
 public:
-	void Spawn( void );
-	void Precache( void );
-	void Touch( CBaseEntity *pOther );
-	void Think( void );
-	int TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType ) { Attack(); return 0; }
+	void Spawn() override;
+	void Precache() override;
+	void Touch( CBaseEntity *pOther ) override;
+	void Think() override;
+	TakeDamageResult TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, const DamageInfo& damageInfo ) override { Attack(); return TakeDamageResult(); }
 	//void HandleAnimEvent( MonsterEvent_t *pEvent );
-	void Attack( void ) {}
+	void Attack() {}
 
-	static const char *pModelNames[];
+	virtual const char* DefaultModel() const = 0;
+	void SetMySize(const Vector& vecMin, const Vector& vecMax);
 };
 
 class CXenSporeSmall : public CXenSpore
 {
-	void Spawn( void );
+	void Spawn() override;
+	const char* DefaultModel() const override {
+		return "models/fungus(small).mdl";
+	}
 };
 
 class CXenSporeMed : public CXenSpore
 {
-	void Spawn( void );
+	void Spawn() override;
+	const char* DefaultModel() const override {
+		return "models/fungus.mdl";
+	}
 };
 
 class CXenSporeLarge : public CXenSpore
 {
-	void Spawn( void );
+	void Spawn() override;
+	const char* DefaultModel() const override {
+		return "models/fungus(large).mdl";
+	}
 
 	static const Vector m_hullSizes[];
 };
@@ -436,7 +495,7 @@ class CXenHull : public CPointEntity
 {
 public:
 	static CXenHull	*CreateHull( CBaseEntity *source, const Vector &mins, const Vector &maxs, const Vector &offset );
-	int Classify( void ) { return CLASS_BARNACLE; }
+	int Classify() override { return CLASS_BARNACLE; }
 };
 
 CXenHull *CXenHull::CreateHull( CBaseEntity *source, const Vector &mins, const Vector &maxs, const Vector &offset )
@@ -462,18 +521,16 @@ LINK_ENTITY_TO_CLASS( xen_spore_medium, CXenSporeMed )
 LINK_ENTITY_TO_CLASS( xen_spore_large, CXenSporeLarge )
 LINK_ENTITY_TO_CLASS( xen_hull, CXenHull )
 
-void CXenSporeSmall::Spawn( void )
+void CXenSporeSmall::Spawn()
 {
-	pev->skin = 0;
 	CXenSpore::Spawn();
-	UTIL_SetSize( pev, Vector( -16, -16, 0 ), Vector( 16, 16, 64) );
+	SetMySize( Vector( -16, -16, 0 ), Vector( 16, 16, 64) );
 }
 
-void CXenSporeMed::Spawn( void )
+void CXenSporeMed::Spawn()
 {
-	pev->skin = 1;
 	CXenSpore::Spawn();
-	UTIL_SetSize( pev, Vector( -40, -40, 0 ), Vector( 40, 40, 120 ) );
+	SetMySize( Vector( -40, -40, 0 ), Vector( 40, 40, 120 ) );
 }
 
 // I just eyeballed these -- fill in hulls for the legs
@@ -486,28 +543,33 @@ const Vector CXenSporeLarge::m_hullSizes[] =
 	Vector( -90, 60, 0 ),
 };
 
-void CXenSporeLarge::Spawn( void )
+void CXenSporeLarge::Spawn()
 {
-	pev->skin = 2;
 	CXenSpore::Spawn();
-	UTIL_SetSize( pev, Vector( -48, -48, 110 ), Vector( 48, 48, 240 ) );
+	SetMySize( Vector( -48, -48, 110 ), Vector( 48, 48, 240 ) );
+
+	if (FBitSet(pev->flags, FL_KILLME))
+		return;
 
 	Vector forward, right;
 
 	UTIL_MakeVectorsPrivate( pev->angles, forward, right, NULL );
+
+	if (FBitSet(pev->spawnflags, SF_XEN_PLANT_NONSOLID))
+		return;
 
 	// Rotate the leg hulls into position
 	for( int i = 0; i < (int)ARRAYSIZE( m_hullSizes ); i++ )
 		CXenHull::CreateHull( this, Vector( -12, -12, 0 ), Vector( 12, 12, 120 ), ( m_hullSizes[i].x * forward ) + ( m_hullSizes[i].y * right ) );
 }
 
-void CXenSpore :: Spawn( void )
+void CXenSpore :: Spawn()
 {
 	Precache();
 
-	SET_MODEL( ENT( pev ), pModelNames[pev->skin] );
+	SetMyModel(DefaultModel());
 	pev->movetype = MOVETYPE_NONE;
-	pev->solid = SOLID_BBOX;
+	pev->solid = FBitSet(pev->spawnflags, SF_XEN_PLANT_NONSOLID) ? SOLID_NOT : SOLID_BBOX;
 	pev->takedamage = DAMAGE_YES;
 
 	//SetActivity( ACT_IDLE );
@@ -516,25 +578,23 @@ void CXenSpore :: Spawn( void )
 	pev->framerate = RANDOM_FLOAT( 0.7f, 1.4f );
 	ResetSequenceInfo();
 	pev->nextthink = gpGlobals->time + RANDOM_FLOAT( 0.1f, 0.4f );	// Load balance these a bit
+
+	if (FBitSet(pev->spawnflags, SF_XEN_PLANT_DROP_TO_FLOOR))
+	{
+		DropToFloor();
+	}
 }
 
-const char *CXenSpore::pModelNames[] =
+void CXenSpore::Precache()
 {
-	"models/fungus(small).mdl",
-	"models/fungus.mdl",
-	"models/fungus(large).mdl",
-};
-
-void CXenSpore::Precache( void )
-{
-	PRECACHE_MODEL( pModelNames[pev->skin] );
+	PrecacheMyModel(DefaultModel());
 }
 
 void CXenSpore::Touch( CBaseEntity *pOther )
 {
 }
 
-void CXenSpore::Think( void )
+void CXenSpore::Think()
 {
 	StudioFrameAdvance();
 	pev->nextthink = gpGlobals->time + 0.1f;
@@ -548,4 +608,17 @@ void CXenSpore::Think( void )
 		break;
 	}
 #endif
+}
+
+void CXenSpore::SetMySize(const Vector &vecMin, const Vector &vecMax)
+{
+	Vector vecMins = vecMin;
+	Vector vecMaxs = vecMax;
+	const EntTemplate* entTemplate = GetMyEntTemplate();
+	if (entTemplate && entTemplate->IsSizeDefined())
+	{
+		vecMins = entTemplate->MinSize();
+		vecMaxs = entTemplate->MaxSize();
+	}
+	UTIL_SetSize(pev, vecMins, vecMaxs);
 }

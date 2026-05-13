@@ -22,9 +22,8 @@
 
 #include "hud.h"
 #include "cl_util.h"
-#include <string.h>
-#include <stdio.h>
 #include "parsemsg.h"
+#include "string_utils.h"
 
 #if USE_VGUI
 #include "vgui_TeamFortressViewport.h"
@@ -32,7 +31,7 @@
 
 DECLARE_MESSAGE( m_TextMessage, TextMsg )
 
-int CHudTextMessage::Init( void )
+int CHudTextMessage::Init()
 {
 	HOOK_MESSAGE( TextMsg );
 
@@ -169,19 +168,19 @@ int CHudTextMessage::MsgFunc_TextMsg( const char *pszName, int iSize, void *pbuf
 #define MSG_BUF_SIZE 128
 	char szBuf[6][MSG_BUF_SIZE];
 
-	strlcpy( szBuf[0], LookupString( READ_STRING(), &msg_dest ), MSG_BUF_SIZE );
+	strncpyEnsureTermination( szBuf[0], LookupString( READ_STRING(), &msg_dest ) );
 
 	for( int i = 1; i <= 4; i++ )
 	{
 		// keep reading strings and using C format strings for subsituting the strings into the localised text string
-		strlcpy( szBuf[i], LookupString( READ_STRING() ), MSG_BUF_SIZE );
+		strncpyEnsureTermination( szBuf[i], LookupString( READ_STRING() ) );
 		StripEndNewlineFromString( szBuf[i] ); // these strings are meant for subsitution into the main strings, so cull the automatic end newlines
 	}
 
 	char *psz = szBuf[5];
 
 #if USE_VGUI
-	if( gViewPort && gViewPort->AllowedToPrintText() == FALSE )
+	if( gViewPort && !gViewPort->AllowedToPrintText() )
 		return 1;
 #endif
 

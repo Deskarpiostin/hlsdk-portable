@@ -19,9 +19,7 @@
 #include "hud.h"
 #include "vgui_SchemeManager.h"
 #include "cvardef.h"
-
-#include <string.h>
-
+#include "string_utils.h"
 
 cvar_t *g_CV_BitmapFonts;
 
@@ -205,7 +203,7 @@ CSchemeManager::CSchemeManager( int xRes, int yRes )
 		static const int tokenSize = 64;
 		char paramName[tokenSize], paramValue[tokenSize];
 
-		strlcpy( paramName, token, tokenSize );
+		strncpyEnsureTermination( paramName, token );
 
 		// get the '=' character
 		pFile = gEngfuncs.COM_ParseFile( pFile, token );
@@ -224,7 +222,7 @@ CSchemeManager::CSchemeManager( int xRes, int yRes )
 
 		// get paramValue
 		pFile = gEngfuncs.COM_ParseFile( pFile, token );
-		strlcpy( paramValue, token, tokenSize );
+		strncpyEnsureTermination( paramValue, token );
 		
 		// is this a new scheme?
 		if ( !stricmp(paramName, "SchemeName") )
@@ -276,7 +274,7 @@ CSchemeManager::CSchemeManager( int xRes, int yRes )
 			pScheme = &tmpSchemes[currentScheme];
 			hasFgColor = hasBgColor = hasArmedFgColor = hasArmedBgColor = hasMouseDownFgColor = hasMouseDownBgColor = false;
 
-			strlcpy( pScheme->schemeName, paramValue, CScheme::SCHEME_NAME_LENGTH );
+			strncpyEnsureTermination( pScheme->schemeName, paramValue );
 		}
 
 		if ( !pScheme )
@@ -288,7 +286,7 @@ CSchemeManager::CSchemeManager( int xRes, int yRes )
 		// pull the data out into the scheme
 		if ( !stricmp(paramName, "FontName") )
 		{
-			strlcpy( pScheme->fontName, paramValue, CScheme::FONT_NAME_LENGTH );
+			strncpyEnsureTermination( pScheme->fontName, paramValue );
 		}
 		else if ( !stricmp(paramName, "FontSize") )
 		{

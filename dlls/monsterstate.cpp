@@ -20,11 +20,11 @@
 #include "extdll.h"
 #include "util.h"
 #include "cbase.h"
-#include "nodes.h"
 #include "monsters.h"
 #include "animation.h"
 #include "saverestore.h"
 #include "soundent.h"
+#include "followingmonster.h"
 
 //=========================================================
 // SetState
@@ -44,9 +44,27 @@ void CBaseMonster::SetState( MONSTERSTATE State )
 	case MONSTERSTATE_IDLE:
 		if( m_hEnemy != 0 )
 		{
+			ALERT( at_aiconsole, "%s (in state %s): stripped enemy %s\n", STRING(pev->classname), MonsterStateDisplayString(m_MonsterState), STRING(m_hEnemy->pev->classname) );
 			m_hEnemy = NULL;// not allowed to have an enemy anymore.
-			ALERT( at_aiconsole, "Stripped\n" );
 		}
+		break;
+	case MONSTERSTATE_ALERT:
+		if (m_MonsterState == MONSTERSTATE_COMBAT)
+		{
+			Remember(bits_MEMORY_ACTIVE_AFTER_COMBAT);
+			// Don't roam after fight if was following the player
+			if (CanRoamAfterCombat())
+			{
+				Remember(bits_MEMORY_SHOULD_ROAM_IN_ALERT);
+			}
+		}
+		break;
+	case MONSTERSTATE_COMBAT:
+		Forget(bits_MEMORY_SHOULD_ROAM_IN_ALERT|bits_MEMORY_ACTIVE_AFTER_COMBAT);
+		break;
+	case MONSTERSTATE_HUNT:
+		if (m_MonsterState != State)
+			m_huntActivitiesCount = 0;
 		break;
 	default:
 		break;
@@ -59,7 +77,7 @@ void CBaseMonster::SetState( MONSTERSTATE State )
 //=========================================================
 // RunAI
 //=========================================================
-void CBaseMonster::RunAI( void )
+void CBaseMonster::RunAI()
 {
 	// to test model's eye height
 	//UTIL_ParticleEffect ( pev->origin + pev->view_ofs, g_vecZero, 255, 10 );
@@ -75,12 +93,15 @@ void CBaseMonster::RunAI( void )
 		 m_MonsterState != MONSTERSTATE_PRONE &&
 		 m_MonsterState != MONSTERSTATE_DEAD )// don't bother with this crap if monster is prone. 
 	{
+		bool bForcedGather = m_bForceConditionsGather;
+		m_bForceConditionsGather = false;
+
 		// collect some sensory Condition information.
 		// don't let monsters outside of the player's PVS act up, or most of the interesting
 		// things will happen before the player gets there!
 		// UPDATE: We now let COMBAT state monsters think and act fully outside of player PVS. This allows the player to leave 
 		// an area where monsters are fighting, and the fight will continue.
-		if( !FNullEnt( FIND_CLIENT_IN_PVS( edict() ) ) || ( m_MonsterState == MONSTERSTATE_COMBAT ) )
+		if( bForcedGather || FBitSet(pev->spawnflags, SF_MONSTER_ACT_OUT_OF_PVS) || ( m_MonsterState == MONSTERSTATE_COMBAT ) || !FNullEnt( FIND_CLIENT_IN_PVS( edict() ) ) )
 		{
 			Look( m_flDistLook );
 			Listen();// check for audible sounds. 
@@ -88,7 +109,7 @@ void CBaseMonster::RunAI( void )
 			// now filter conditions.
 			ClearConditions( IgnoreConditions() );
 
-			GetEnemy();
+			GetEnemy(false);
 		}
 
 		// do these calculations if monster has an enemy.
@@ -110,17 +131,16 @@ void CBaseMonster::RunAI( void )
 	// we throw them out cause we don't want them sitting around through the lifespan of a schedule
 	// that doesn't use them. 
 	m_afConditions &= ~( bits_COND_LIGHT_DAMAGE | bits_COND_HEAVY_DAMAGE );
+	Forget(bits_MEMORY_BLOCKER_IS_ENEMY);
 }
 
 //=========================================================
 // GetIdealState - surveys the Conditions information available
 // and finds the best new state for a monster.
 //=========================================================
-MONSTERSTATE CBaseMonster::GetIdealState( void )
+MONSTERSTATE CBaseMonster::GetIdealState()
 {
-	int iConditions;
-
-	iConditions = IScheduleFlags();
+	int iConditions = IScheduleFlags();
 
 	// If no schedule conditions, the new ideal state is probably the reason we're in here.
 	switch( m_MonsterState )
@@ -152,9 +172,7 @@ MONSTERSTATE CBaseMonster::GetIdealState( void )
 			}
 			else if( iConditions & bits_COND_HEAR_SOUND )
 			{
-				CSound *pSound;
-
-				pSound = PBestSound();
+				CSound *pSound = PBestSound();
 				ASSERT( pSound != NULL );
 				if( pSound )
 				{
@@ -202,7 +220,7 @@ MONSTERSTATE CBaseMonster::GetIdealState( void )
 			{
 				m_IdealMonsterState = MONSTERSTATE_ALERT;
 				// pev->effects = EF_BRIGHTFIELD;
-				ALERT( at_aiconsole, "***Combat state with no enemy!\n" );
+				ALERT( at_aiconsole, "*** %s: Combat state with no enemy!\n", STRING(pev->classname) );
 			}
 			break;
 		}
@@ -214,6 +232,21 @@ MONSTERSTATE CBaseMonster::GetIdealState( void )
 		HUNT goes to COMBAT upon seeing enemy
 		*/
 		{
+			if( iConditions & ( bits_COND_NEW_ENEMY | bits_COND_SEE_ENEMY ) )
+			{
+				// see an enemy we MUST attack
+				m_IdealMonsterState = MONSTERSTATE_COMBAT;
+			}
+			else if( iConditions & (bits_COND_LIGHT_DAMAGE|bits_COND_HEAVY_DAMAGE) )
+			{
+				MakeIdealYaw( m_vecEnemyLKP );
+				m_IdealMonsterState = MONSTERSTATE_ALERT;
+			}
+			else if (m_huntActivitiesCount >= 4)
+			{
+				m_huntActivitiesCount = 0;
+				m_IdealMonsterState = MONSTERSTATE_ALERT;
+			}
 			break;
 		}
 	case MONSTERSTATE_SCRIPT:

@@ -19,9 +19,7 @@
 #include "hud.h"
 #include "cl_util.h"
 #include "parsemsg.h"
-
-#include <string.h>
-#include <stdio.h>
+#include "string_utils.h"
 
 #if USE_VGUI
 #include "vgui_TeamFortressViewport.h"
@@ -33,9 +31,9 @@ struct DeathNoticeItem {
 	char szKiller[MAX_PLAYER_NAME_LENGTH * 2];
 	char szVictim[MAX_PLAYER_NAME_LENGTH * 2];
 	int iId;	// the index number of the associated sprite
-	int iSuicide;
-	int iTeamKill;
-	int iNonPlayerKill;
+	bool iSuicide;
+	bool iTeamKill;
+	bool iNonPlayerKill;
 	float flDisplayTime;
 	float *KillerColor;
 	float *VictimColor;
@@ -48,11 +46,11 @@ static int DEATHNOTICE_DISPLAY_TIME = 6;
 
 DeathNoticeItem rgDeathNoticeList[MAX_DEATHNOTICES + 1];
 
-float g_ColorBlue[3]	= { 0.6, 0.8, 1.0 };
-float g_ColorRed[3]	= { 1.0, 0.25, 0.25 };
-float g_ColorGreen[3]	= { 0.6, 1.0, 0.6 };
-float g_ColorYellow[3]	= { 1.0, 0.7, 0.0 };
-float g_ColorGrey[3]	= { 0.8, 0.8, 0.8 };
+float g_ColorBlue[3]	= { 0.6f, 0.8f, 1.0f };
+float g_ColorRed[3]	= { 1.0f, 0.25f, 0.25f };
+float g_ColorGreen[3]	= { 0.6f, 1.0f, 0.6f };
+float g_ColorYellow[3]	= { 1.0f, 0.7f, 0.0f };
+float g_ColorGrey[3]	= { 0.8f, 0.8f, 0.8f };
 
 float *GetClientColor( int clientIndex )
 {
@@ -69,7 +67,7 @@ float *GetClientColor( int clientIndex )
 	return NULL;
 }
 
-int CHudDeathNotice::Init( void )
+int CHudDeathNotice::Init()
 {
 	gHUD.AddHudElem( this );
 
@@ -80,12 +78,12 @@ int CHudDeathNotice::Init( void )
 	return 1;
 }
 
-void CHudDeathNotice::InitHUDData( void )
+void CHudDeathNotice::InitHUDData()
 {
 	memset( rgDeathNoticeList, 0, sizeof(rgDeathNoticeList) );
 }
 
-int CHudDeathNotice::VidInit( void )
+int CHudDeathNotice::VidInit()
 {
 	m_HUD_d_skull = gHUD.GetSpriteIndex( "d_skull" );
 
@@ -158,7 +156,7 @@ int CHudDeathNotice::Draw( float flTime )
 			x += ( gHUD.GetSpriteRect(id).right - gHUD.GetSpriteRect(id).left );
 
 			// Draw victims name (if it was a player that was killed)
-			if( rgDeathNoticeList[i].iNonPlayerKill == FALSE )
+			if( !rgDeathNoticeList[i].iNonPlayerKill )
 			{
 				if( rgDeathNoticeList[i].VictimColor )
 					DrawSetTextColor( rgDeathNoticeList[i].VictimColor[0], rgDeathNoticeList[i].VictimColor[1], rgDeathNoticeList[i].VictimColor[2] );
@@ -183,14 +181,9 @@ int CHudDeathNotice::MsgFunc_DeathMsg( const char *pszName, int iSize, void *pbu
 
 	char killedwith[32];
 	strcpy( killedwith, "d_" );
-	strlcat( killedwith, READ_STRING(), sizeof( killedwith ));
+	strcatEnsureTermination( killedwith, READ_STRING() );
 
-#if USE_VGUI && !USE_NOVGUI_SCOREBOARD
-	if (gViewPort)
-		gViewPort->DeathMsg( killer, victim );
-#else
 	gHUD.m_Scoreboard.DeathMsg( killer, victim );
-#endif
 
 	gHUD.m_Spectator.DeathMessage( victim );
 
@@ -219,7 +212,7 @@ int CHudDeathNotice::MsgFunc_DeathMsg( const char *pszName, int iSize, void *pbu
 	else
 	{
 		rgDeathNoticeList[i].KillerColor = GetClientColor( killer );
-		strlcpy( rgDeathNoticeList[i].szKiller, killer_name, MAX_PLAYER_NAME_LENGTH );
+		strncpyEnsureTermination( rgDeathNoticeList[i].szKiller, killer_name, MAX_PLAYER_NAME_LENGTH );
 	}
 
 	// Get the Victim's name
@@ -235,13 +228,13 @@ int CHudDeathNotice::MsgFunc_DeathMsg( const char *pszName, int iSize, void *pbu
 	else
 	{
 		rgDeathNoticeList[i].VictimColor = GetClientColor( victim );
-		strlcpy( rgDeathNoticeList[i].szVictim, victim_name, MAX_PLAYER_NAME_LENGTH );
+		strncpyEnsureTermination( rgDeathNoticeList[i].szVictim, victim_name, MAX_PLAYER_NAME_LENGTH );
 	}
 
 	// Is it a non-player object kill?
 	if( ( (signed char)victim ) == -1 )
 	{
-		rgDeathNoticeList[i].iNonPlayerKill = TRUE;
+		rgDeathNoticeList[i].iNonPlayerKill = true;
 
 		// Store the object's name in the Victim slot (skip the d_ bit)
 		strcpy( rgDeathNoticeList[i].szVictim, killedwith + 2 );
@@ -249,10 +242,10 @@ int CHudDeathNotice::MsgFunc_DeathMsg( const char *pszName, int iSize, void *pbu
 	else
 	{
 		if( killer == victim || killer == 0 )
-			rgDeathNoticeList[i].iSuicide = TRUE;
+			rgDeathNoticeList[i].iSuicide = true;
 
 		if( !strcmp( killedwith, "d_teammate" ) )
-			rgDeathNoticeList[i].iTeamKill = TRUE;
+			rgDeathNoticeList[i].iTeamKill = true;
 	}
 
 	// Find the sprite in the list

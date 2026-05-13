@@ -19,12 +19,14 @@
 #include "extdll.h"
 #include "util.h"
 #include "cbase.h"
-#include "weapons.h"
 #include "player.h"
 #include "talkmonster.h"
 #include "gamerules.h"
-
-static char *memfgets( byte *pMemFile, int fileSize, int &filePos, char *pBuffer, int bufferSize );
+#include "tex_materials.h"
+#include "soundent.h"
+#include "pm_shared.h"
+#include "locus.h"
+#include "common_soundscripts.h"
 
 // ==================== GENERIC AMBIENT SOUND ======================================
 
@@ -108,26 +110,59 @@ dynpitchvol_t rgdpvpreset[CDPVPRESETMAX] =
 {27,128,	 90,	10,		10,		10,		1,		20,		40,		1,		5,		10,		20,		0,		0,0,0,0,0,0,0,0,0,0}
 };
 
+#define AMBIENT_SOUND_STATIC			0	// medium radius attenuation
+#define AMBIENT_SOUND_EVERYWHERE		1
+#define AMBIENT_SOUND_SMALLRADIUS		2
+#define AMBIENT_SOUND_MEDIUMRADIUS		4
+#define AMBIENT_SOUND_LARGERADIUS		8
+#define AMBIENT_SOUND_START_SILENT		16
+#define AMBIENT_SOUND_NOT_LOOPING		32
+
+#define	LFO_SQUARE			1
+#define LFO_TRIANGLE		2
+#define LFO_RANDOM			3
+
+enum
+{
+	AMBIENT_SOUND_RADIUS_DEFAULT,
+	AMBIENT_SOUND_RADIUS_SMALL,
+	AMBIENT_SOUND_RADIUS_MEDIUM,
+	AMBIENT_SOUND_RADIUS_LARGE,
+	AMBIENT_SOUND_RADIUS_HUGE,
+	AMBIENT_SOUND_RADIUS_ENORMOUS,
+	AMBIENT_SOUND_RADIUS_EVERYWHERE,
+};
+
 class CAmbientGeneric : public CBaseEntity
 {
 public:
-	void KeyValue( KeyValueData* pkvd );
-	void Spawn( void );
-	void Precache( void );
+	void KeyValue( KeyValueData* pkvd ) override;
+	void Spawn() override;
+	void Precache() override;
+	void Activate() override;
 	void EXPORT ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
-	void EXPORT RampThink( void );
-	void InitModulationParms( void );
+	void EXPORT StartPlayFrom();
+	void EXPORT RampThink();
+	void InitModulationParms();
+	virtual const char* GetNextSound() { return STRING(pev->message); }
 
-	virtual int Save( CSave &save );
-	virtual int Restore( CRestore &restore );
+	int Save( CSave &save ) override;
+	int Restore( CRestore &restore ) override;
 	static TYPEDESCRIPTION m_SaveData[];
-	virtual int ObjectCaps( void ) { return ( CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION ); }
+	int ObjectCaps() override { return ( CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION ); }
 
 	float m_flAttenuation;		// attenuation value
 	dynpitchvol_t m_dpv;
 
-	BOOL m_fActive;	// only TRUE when the entity is playing a looping sound
-	BOOL m_fLooping;	// TRUE when the sound played will loop
+	bool m_fActive;	// only true when the entity is playing a looping sound
+	bool m_fLooping;	// true when the sound played will loop
+
+	EHANDLE m_hPlayFrom; //LRC - the entity to play from
+	int		m_iChannel; //LRC - the channel to play from, for "play from X" sounds
+	EHANDLE m_hActivator; // this is for m_hPlayFrom, in case the entity is !activator
+
+	virtual bool EntityToPlayFromIsDefined();
+	virtual CBaseEntity* GetEntityToPlayFrom(CBaseEntity* pActivator);
 };
 
 LINK_ENTITY_TO_CLASS( ambient_generic, CAmbientGeneric )
@@ -137,6 +172,8 @@ TYPEDESCRIPTION	CAmbientGeneric::m_SaveData[] =
 	DEFINE_FIELD( CAmbientGeneric, m_flAttenuation, FIELD_FLOAT ),
 	DEFINE_FIELD( CAmbientGeneric, m_fActive, FIELD_BOOLEAN ),
 	DEFINE_FIELD( CAmbientGeneric, m_fLooping, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CAmbientGeneric, m_iChannel, FIELD_INTEGER ), //LRC
+	DEFINE_FIELD( CAmbientGeneric, m_hPlayFrom, FIELD_EHANDLE ), //LRC
 
 	// HACKHACK - This is not really in the spirit of the save/restore design, but save this
 	// out as a binary data block.  If the dynpitchvol_t is changed, old saved games will NOT
@@ -144,6 +181,8 @@ TYPEDESCRIPTION	CAmbientGeneric::m_SaveData[] =
 	// The right way to do this is to split the input parms (read in keyvalue) into members and re-init this
 	// struct in Precache(), but it's unlikely that the struct will change, so it's not worth the time right now.
 	DEFINE_ARRAY( CAmbientGeneric, m_dpv, FIELD_CHARACTER, sizeof(dynpitchvol_t) ),
+
+	DEFINE_FIELD( CAmbientGeneric, m_hActivator, FIELD_EHANDLE ),
 };
 
 IMPLEMENT_SAVERESTORE( CAmbientGeneric, CBaseEntity )
@@ -151,7 +190,7 @@ IMPLEMENT_SAVERESTORE( CAmbientGeneric, CBaseEntity )
 //
 // ambient_generic - general-purpose user-defined static sound
 //
-void CAmbientGeneric::Spawn( void )
+void CAmbientGeneric::Spawn()
 {
 /*
 		-1 : "Default"
@@ -160,26 +199,50 @@ void CAmbientGeneric::Spawn( void )
 		125 : "Medium Radius"
 		80  : "Large Radius"
 */
-	if( FBitSet( pev->spawnflags, AMBIENT_SOUND_EVERYWHERE ) )
+	// if the designer didn't set a sound attenuation, default to one.
+	m_flAttenuation = ATTN_STATIC;
+
+	if (pev->impulse == AMBIENT_SOUND_RADIUS_DEFAULT)
 	{
-		m_flAttenuation = ATTN_NONE;
-	}
-	else if( FBitSet( pev->spawnflags, AMBIENT_SOUND_SMALLRADIUS ) )
-	{
-		m_flAttenuation = ATTN_IDLE;
-	}
-	else if( FBitSet( pev->spawnflags, AMBIENT_SOUND_MEDIUMRADIUS ) )
-	{
-		m_flAttenuation = ATTN_STATIC;
-	}
-	else if( FBitSet( pev->spawnflags, AMBIENT_SOUND_LARGERADIUS ) )
-	{
-		m_flAttenuation = ATTN_NORM;
-	}
-	else 
-	{
-		// if the designer didn't set a sound attenuation, default to one.
-		m_flAttenuation = ATTN_STATIC;
+		if( FBitSet( pev->spawnflags, AMBIENT_SOUND_EVERYWHERE ) )
+		{
+			m_flAttenuation = ATTN_NONE;
+		}
+		else if( FBitSet( pev->spawnflags, AMBIENT_SOUND_SMALLRADIUS ) )
+		{
+			m_flAttenuation = ATTN_IDLE;
+		}
+		else if( FBitSet( pev->spawnflags, AMBIENT_SOUND_MEDIUMRADIUS ) )
+		{
+			m_flAttenuation = ATTN_STATIC;
+		}
+		else if( FBitSet( pev->spawnflags, AMBIENT_SOUND_LARGERADIUS ) )
+		{
+			m_flAttenuation = ATTN_NORM;
+		}
+	} else {
+		switch (pev->impulse) {
+		case AMBIENT_SOUND_RADIUS_SMALL:
+			m_flAttenuation = ATTN_IDLE;
+			break;
+		case AMBIENT_SOUND_RADIUS_MEDIUM:
+			m_flAttenuation = ATTN_STATIC;
+			break;
+		case AMBIENT_SOUND_RADIUS_LARGE:
+			m_flAttenuation = ATTN_NORM;
+			break;
+		case AMBIENT_SOUND_RADIUS_HUGE:
+			m_flAttenuation = 0.5f;
+			break;
+		case AMBIENT_SOUND_RADIUS_ENORMOUS:
+			m_flAttenuation = 0.25f;
+			break;
+		case AMBIENT_SOUND_RADIUS_EVERYWHERE:
+			m_flAttenuation = ATTN_NONE;
+			break;
+		default:
+			break;
+		}
 	}
 
 	const char *szSoundFile = STRING( pev->message );
@@ -205,16 +268,20 @@ void CAmbientGeneric::Spawn( void )
 
 	SetUse( &CAmbientGeneric::ToggleUse );
 	
-	m_fActive = FALSE;
+	m_fActive = false;
 
 	if( FBitSet( pev->spawnflags, AMBIENT_SOUND_NOT_LOOPING ) )
-		m_fLooping = FALSE;
+		m_fLooping = false;
 	else
-		m_fLooping = TRUE;
+		m_fLooping = true;
+
+	if (m_iChannel == 0)
+		m_iChannel = CHAN_STATIC;
+
 	Precache();
 }
 
-void CAmbientGeneric::Precache( void )
+void CAmbientGeneric::Precache()
 {
 	const char *szSoundFile = STRING( pev->message );
 
@@ -231,13 +298,56 @@ void CAmbientGeneric::Precache( void )
 	{
 		// start the sound ASAP
 		if( m_fLooping )
-			m_fActive = TRUE;
+			m_fActive = true;
 	}
-	if( m_fActive )
-	{
-		UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile, 
-				( m_dpv.vol * 0.01f ), m_flAttenuation, SND_SPAWNING, m_dpv.pitch );
 
+	if (m_fActive && !EntityToPlayFromIsDefined())
+	{
+		UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile,
+				( m_dpv.vol * 0.01f ), m_flAttenuation, SND_SPAWNING, m_dpv.pitch );
+		pev->nextthink = gpGlobals->time + 0.1f;
+	}
+}
+
+bool CAmbientGeneric::EntityToPlayFromIsDefined()
+{
+	return !FStringNull(pev->target);
+}
+
+CBaseEntity* CAmbientGeneric::GetEntityToPlayFrom(CBaseEntity *pActivator)
+{
+	return UTIL_FindEntityByTargetname(NULL, STRING(pev->target), pActivator);
+}
+
+void CAmbientGeneric::Activate()
+{
+	if (m_fActive && EntityToPlayFromIsDefined())
+	{
+		CBaseEntity *pTarget = GetEntityToPlayFrom(m_hActivator);
+		if (!pTarget)
+		{
+			ALERT(at_console, "WARNING: %s \"%s\" can't find \"%s\", its entity to play from.\n",
+					STRING(pev->classname), STRING(pev->targetname), STRING(pev->target));
+		}
+		else
+		{
+			m_hPlayFrom = pTarget;
+			SetThink(&CAmbientGeneric::StartPlayFrom); //LRC
+			pev->nextthink = gpGlobals->time + 0.1f;
+		}
+	}
+}
+
+void CAmbientGeneric::StartPlayFrom()
+{
+	const char* szSoundFile = STRING(pev->message);
+
+	if (m_hPlayFrom != 0)
+	{
+		EMIT_SOUND_DYN( m_hPlayFrom->edict(), m_iChannel, szSoundFile, //LRC
+				(m_dpv.vol * 0.01f), m_flAttenuation, SND_SPAWNING, m_dpv.pitch);
+
+		SetThink(&CAmbientGeneric::RampThink);
 		pev->nextthink = gpGlobals->time + 0.1f;
 	}
 }
@@ -246,13 +356,13 @@ void CAmbientGeneric::Precache( void )
 // pitch or volume of the playing sound.  This function will
 // ramp pitch and/or volume up or down, modify pitch/volume
 // with lfo if active.
-void CAmbientGeneric::RampThink( void )
+void CAmbientGeneric::RampThink()
 {
 	const char *szSoundFile = STRING( pev->message );
 	int pitch = m_dpv.pitch; 
 	int vol = m_dpv.vol;
 	int flags = 0;
-	int fChanged = 0;		// FALSE if pitch and vol remain unchanged this round
+	bool fChanged = false;		// false if pitch and vol remain unchanged this round
 	int prev;
 
 	if( !m_dpv.spinup && !m_dpv.spindown && !m_dpv.fadein && !m_dpv.fadeout && !m_dpv.lfotype )
@@ -284,8 +394,15 @@ void CAmbientGeneric::RampThink( void )
 			m_dpv.spindown = 0;				// done with ramp down
 
 			// shut sound off
-			UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile, 
+			if (m_hPlayFrom != 0)
+			{
+				STOP_SOUND( m_hPlayFrom->edict(), m_iChannel, szSoundFile); //LRC
+			}
+			else
+			{
+				UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile,
 					0, 0, SND_STOP, 0 );
+			}
 
 			// return without setting nextthink
 			return;
@@ -328,8 +445,15 @@ void CAmbientGeneric::RampThink( void )
 			m_dpv.fadeout = 0;				// done with ramp down
 
 			// shut sound off
-			UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile, 
+			if (m_hPlayFrom != 0)
+			{
+				STOP_SOUND( m_hPlayFrom->edict(), m_iChannel, szSoundFile); //LRC
+			}
+			else
+			{
+				UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile,
 					0, 0, SND_STOP, 0 );
+			}
 
 			// return without setting nextthink
 			return;
@@ -432,8 +556,16 @@ void CAmbientGeneric::RampThink( void )
 		if( pitch == PITCH_NORM )
 			pitch = PITCH_NORM + 1; // don't send 'no pitch' !
 
-		UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile,
+		if (m_hPlayFrom != 0)
+		{
+			EMIT_SOUND_DYN( m_hPlayFrom->edict(), m_iChannel, szSoundFile, (vol * 0.01f), //LRC
+					m_flAttenuation, flags, pitch);
+		}
+		else
+		{
+			UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile,
 				( vol * 0.01f ), m_flAttenuation, flags, pitch );
+		}
 	}
 
 	// update ramps at 5hz
@@ -444,7 +576,7 @@ void CAmbientGeneric::RampThink( void )
 // Init all ramp params in preparation to 
 // play a new sound
 
-void CAmbientGeneric::InitModulationParms( void )
+void CAmbientGeneric::InitModulationParms()
 {
 	int pitchinc;
 
@@ -542,6 +674,9 @@ void CAmbientGeneric::ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, 
 			return;
 	}
 
+	if (!m_fLooping)
+		UTIL_ShowCaption(szSoundFile, 0, true);
+
 	// Directly change pitch if arg passed. Only works if sound is already playing.
 	if( useType == USE_SET && m_fActive )		// Momentary buttons will pass down a float in here
 	{
@@ -555,12 +690,19 @@ void CAmbientGeneric::ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, 
 
 		m_dpv.pitch = (int)( fraction * 255.0f );
 
-		UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile, 0, 0, SND_CHANGE_PITCH, m_dpv.pitch );
+		if (m_hPlayFrom != 0)
+		{
+			EMIT_SOUND_DYN( m_hPlayFrom->edict(), m_iChannel, szSoundFile, 0, 0, SND_CHANGE_PITCH, m_dpv.pitch);
+		}
+		else
+		{
+			UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile, 0, 0, SND_CHANGE_PITCH, m_dpv.pitch );
+		}
 		return;
 	}
 
 	// Toggle
-	// m_fActive is TRUE only if a looping sound is playing.
+	// m_fActive is true only if a looping sound is playing.
 	if( m_fActive )
 	{
 		// turn sound off
@@ -589,7 +731,7 @@ void CAmbientGeneric::ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, 
 		}
 		else
 		{
-			m_fActive = FALSE;
+			m_fActive = false;
 
 			// HACKHACK - this makes the code in Precache() work properly after a save/restore
 			pev->spawnflags |= AMBIENT_SOUND_START_SILENT;
@@ -604,8 +746,14 @@ void CAmbientGeneric::ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, 
 				m_dpv.fadein = 0;
 				pev->nextthink = gpGlobals->time + 0.1f;
 			}
+			else if (m_hPlayFrom != 0)
+			{
+				STOP_SOUND( m_hPlayFrom->edict(), m_iChannel, szSoundFile);
+			}
 			else
+			{
 				UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile, 0, 0, SND_STOP, 0 );
+			}
 		}
 	}
 	else 
@@ -617,7 +765,11 @@ void CAmbientGeneric::ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, 
 		// playing from a previous trigger press, it will be shut off
 		// and then restarted.
 		if( m_fLooping )
-			m_fActive = TRUE;
+			m_fActive = true;
+		else if (m_hPlayFrom != 0)
+		{
+			STOP_SOUND( m_hPlayFrom->edict(), m_iChannel, szSoundFile); //LRC
+		}
 		else
 			// shut sound off now - may be interrupting a long non-looping sound
 			UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile, 0, 0, SND_STOP, 0 );
@@ -625,7 +777,22 @@ void CAmbientGeneric::ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, 
 		// init all ramp params for startup
 		InitModulationParms();
 
-		UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile, ( m_dpv.vol * 0.01f ), m_flAttenuation, 0, m_dpv.pitch );
+		szSoundFile = GetNextSound();
+
+		if (EntityToPlayFromIsDefined())
+		{
+			m_hActivator = pActivator;
+			m_hPlayFrom = GetEntityToPlayFrom(pActivator);
+			if (m_hPlayFrom != 0)
+			{
+				EMIT_SOUND_DYN( m_hPlayFrom->edict(), m_iChannel, szSoundFile, //LRC
+						(m_dpv.vol * 0.01f), m_flAttenuation, 0, m_dpv.pitch);
+			}
+		}
+		else
+		{
+			UTIL_EmitAmbientSound( ENT( pev ), pev->origin, szSoundFile, ( m_dpv.vol * 0.01f ), m_flAttenuation, 0, m_dpv.pitch );
+		}
 
 		pev->nextthink = gpGlobals->time + 0.1f;
 	} 
@@ -638,17 +805,24 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 	// NOTE: changing any of the modifiers in this code
 	// NOTE: also requires changing InitModulationParms code.
 
+	// channel (e.g. CHAN_STATIC, etc)
+	if (FStrEq(pkvd->szKeyName, "channel"))
+	{
+		m_iChannel = atoi(pkvd->szValue);
+		pkvd->fHandled = true;
+	}
+
 	// preset
-	if( FStrEq( pkvd->szKeyName, "preset" ) )
+	else if( FStrEq( pkvd->szKeyName, "preset" ) )
 	{
 		m_dpv.preset = atoi( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	// pitchrun
 	else if( FStrEq( pkvd->szKeyName, "pitch" ) )
 	{
 		m_dpv.pitchrun = atoi( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 		
 		if( m_dpv.pitchrun > 255 )
 			m_dpv.pitchrun = 255;
@@ -659,7 +833,7 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 	else if( FStrEq( pkvd->szKeyName, "pitchstart" ) )
 	{
 		m_dpv.pitchstart = atoi( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 		
 		if( m_dpv.pitchstart > 255 )
 			m_dpv.pitchstart = 255;
@@ -679,7 +853,7 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 		if( m_dpv.spinup > 0 )
 			m_dpv.spinup = ( 101 - m_dpv.spinup ) * 64;
 		m_dpv.spinupsav = m_dpv.spinup;
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	// spindown
 	else if( FStrEq( pkvd->szKeyName, "spindown" ) )
@@ -694,7 +868,7 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 		if( m_dpv.spindown > 0 )
 			m_dpv.spindown = ( 101 - m_dpv.spindown ) * 64;
 		m_dpv.spindownsav = m_dpv.spindown;
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	// volstart
 	else if( FStrEq( pkvd->szKeyName, "volstart" ) )
@@ -708,7 +882,7 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 
 		m_dpv.volstart *= 10;	// 0 - 100
 
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	// fadein
 	else if( FStrEq( pkvd->szKeyName, "fadein" ) )
@@ -723,7 +897,7 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 		if( m_dpv.fadein > 0 )
 			m_dpv.fadein = ( 101 - m_dpv.fadein ) * 64;
 		m_dpv.fadeinsav = m_dpv.fadein;
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	// fadeout
 	else if( FStrEq( pkvd->szKeyName, "fadeout" ) )
@@ -738,7 +912,7 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 		if( m_dpv.fadeout > 0 )
 			m_dpv.fadeout = ( 101 - m_dpv.fadeout ) * 64;
 		m_dpv.fadeoutsav = m_dpv.fadeout;
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	// lfotype
 	else if( FStrEq( pkvd->szKeyName, "lfotype" ) )
@@ -746,7 +920,7 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 		m_dpv.lfotype = atoi( pkvd->szValue );
 		if( m_dpv.lfotype > 4 )
 			m_dpv.lfotype = LFO_TRIANGLE;
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	// lforate
 	else if( FStrEq( pkvd->szKeyName, "lforate" ) )
@@ -760,7 +934,7 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 
 		m_dpv.lforate *= 256;
 
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	// lfomodpitch
 	else if( FStrEq( pkvd->szKeyName, "lfomodpitch" ) )
@@ -771,7 +945,7 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 		if( m_dpv.lfomodpitch < 0 )
 			m_dpv.lfomodpitch = 0;
 
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	// lfomodvol
 	else if( FStrEq( pkvd->szKeyName, "lfomodvol" ) )
@@ -782,7 +956,7 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 		if( m_dpv.lfomodvol < 0 )
 			m_dpv.lfomodvol = 0;
 
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	// cspinup
 	else if( FStrEq( pkvd->szKeyName, "cspinup" ) )
@@ -793,10 +967,59 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 		if( m_dpv.cspinup < 0 )
 			m_dpv.cspinup = 0;
 
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
+	}
+	else if( FStrEq( pkvd->szKeyName, "attenuation" ) )
+	{
+		pev->impulse = atoi( pkvd->szValue );
+		pkvd->fHandled = true;
 	}
 	else
 		CBaseEntity::KeyValue( pkvd );
+}
+
+class CAmbientRandom : public CAmbientGeneric
+{
+public:
+	void Precache() override;
+	const char* GetNextSound() override;
+};
+
+LINK_ENTITY_TO_CLASS( ambient_random, CAmbientRandom )
+
+void CAmbientRandom::Precache()
+{
+	if (!FStringNull(pev->noise))
+		PRECACHE_SOUND(STRING(pev->noise));
+	if (!FStringNull(pev->noise1))
+		PRECACHE_SOUND(STRING(pev->noise1));
+	if (!FStringNull(pev->noise2))
+		PRECACHE_SOUND(STRING(pev->noise2));
+	if (!FStringNull(pev->noise3))
+		PRECACHE_SOUND(STRING(pev->noise3));
+	CAmbientGeneric::Precache();
+}
+
+const char* CAmbientRandom::GetNextSound()
+{
+	int count = 0;
+	string_t* noises[4] = {0};
+	if (!FStringNull(pev->noise))
+		noises[count++] = &pev->noise;
+	if (!FStringNull(pev->noise1))
+		noises[count++] = &pev->noise1;
+	if (!FStringNull(pev->noise2))
+		noises[count++] = &pev->noise2;
+	if (!FStringNull(pev->noise3))
+		noises[count++] = &pev->noise3;
+	if (count > 0)
+	{
+		string_t *chosen = noises[RANDOM_LONG(0,count-1)];
+		string_t tmp = pev->message;
+		pev->message = *chosen;
+		*chosen = tmp;
+	}
+	return STRING(pev->message);
 }
 
 // =================== ROOM SOUND FX ==========================================
@@ -804,17 +1027,17 @@ void CAmbientGeneric::KeyValue( KeyValueData *pkvd )
 class CEnvSound : public CPointEntity
 {
 public:
-	void KeyValue( KeyValueData* pkvd);
-	void Spawn( void );
+	void KeyValue( KeyValueData* pkvd) override;
+	void Spawn() override;
 
-	void Think( void );
+	void Think() override;
 
-	virtual int Save( CSave &save );
-	virtual int Restore( CRestore &restore );
+	int Save( CSave &save ) override;
+	int Restore( CRestore &restore ) override;
 	static TYPEDESCRIPTION m_SaveData[];
 
 	float m_flRadius;
-	float m_flRoomtype;
+	int m_Roomtype;
 };
 
 LINK_ENTITY_TO_CLASS( env_sound, CEnvSound )
@@ -822,7 +1045,7 @@ LINK_ENTITY_TO_CLASS( env_sound, CEnvSound )
 TYPEDESCRIPTION	CEnvSound::m_SaveData[] =
 {
 	DEFINE_FIELD( CEnvSound, m_flRadius, FIELD_FLOAT ),
-	DEFINE_FIELD( CEnvSound, m_flRoomtype, FIELD_FLOAT ),
+	DEFINE_FIELD( CEnvSound, m_Roomtype, FIELD_INTEGER ),
 };
 
 IMPLEMENT_SAVERESTORE( CEnvSound, CPointEntity )
@@ -832,19 +1055,19 @@ void CEnvSound::KeyValue( KeyValueData *pkvd )
 	if( FStrEq( pkvd->szKeyName, "radius" ) )
 	{
 		m_flRadius = atof( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	if( FStrEq( pkvd->szKeyName, "roomtype" ) )
 	{
-		m_flRoomtype = atof( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		m_Roomtype = atoi( pkvd->szValue );
+		pkvd->fHandled = true;
 	}
 }
 
-// returns TRUE if the given sound entity (pev) is in range 
+// returns true if the given sound entity (pev) is in range
 // and can see the given player entity (pevTarget)
 
-BOOL FEnvSoundInRange( entvars_t *pev, entvars_t *pevTarget, float *pflRange )
+bool FEnvSoundInRange( entvars_t *pev, entvars_t *pevTarget, float *pflRange )
 {
 	CEnvSound *pSound = GetClassPtr( (CEnvSound *)pev );
 	Vector vecSpot1 = pev->origin + pev->view_ofs;
@@ -857,19 +1080,19 @@ BOOL FEnvSoundInRange( entvars_t *pev, entvars_t *pevTarget, float *pflRange )
 
 	// check if line of sight crosses water boundary, or is blocked
 	if( ( tr.fInOpen && tr.fInWater ) || tr.flFraction != 1 )
-		return FALSE;
+		return false;
 
 	// calc range from sound entity to player
 	vecRange = tr.vecEndPos - vecSpot1;
 	flRange = vecRange.Length();
 
 	if( pSound->m_flRadius < flRange )		
-		return FALSE;
+		return false;
 
 	if( pflRange )
 		*pflRange = flRange;
 
-	return TRUE;
+	return true;
 }
 
 //
@@ -883,7 +1106,7 @@ BOOL FEnvSoundInRange( entvars_t *pev, entvars_t *pevTarget, float *pflRange )
 
 // CONSIDER: if player in water state, autoset roomtype to 14,15 or 16. 
 
-void CEnvSound::Think( void )
+void CEnvSound::Think()
 {
 	// get pointer to client if visible; FIND_CLIENT_IN_PVS will
 	// cycle through visible clients on consecutive calls.
@@ -902,7 +1125,7 @@ void CEnvSound::Think( void )
 	{
 		// this is the entity currently affecting player, check
 		// for validity
-		if( pPlayer->m_flSndRoomtype != 0 && pPlayer->m_flSndRange != 0 )
+		if( pPlayer->m_SndRoomtype != 0 && pPlayer->m_flSndRange != 0 )
 		{
 			// we're looking at a valid sound entity affecting
 			// player, make sure it's still valid, update range
@@ -914,11 +1137,11 @@ void CEnvSound::Think( void )
 			else
 			{
 				// current sound entity affecting player is no longer valid,
-				// flag this state by clearing room_type and range.
+				// flag this state by clearing source handle and range.
 				// NOTE: we do not actually change the player's room_type
 				// NOTE: until we have a new valid room_type to change it to.
 				pPlayer->m_flSndRange = 0;
-				pPlayer->m_flSndRoomtype = 0;
+				pPlayer->m_pentSndLast = 0;
 				goto env_sound_Think_slow;
 			}
 		}
@@ -938,18 +1161,10 @@ void CEnvSound::Think( void )
 		{
 			// new entity is closer to player, so it wins.
 			pPlayer->m_pentSndLast = ENT( pev );
-			pPlayer->m_flSndRoomtype = m_flRoomtype;
+			pPlayer->m_SndRoomtype = m_Roomtype;
 			pPlayer->m_flSndRange = flRange;
 
-			// send room_type command to player's server.
-			// this should be a rare event - once per change of room_type
-			// only!
-
-			//CLIENT_COMMAND( pentPlayer, "room_type %f", m_flRoomtype );
-
-			MESSAGE_BEGIN( MSG_ONE, SVC_ROOMTYPE, NULL, pentPlayer );		// use the magic #1 for "one client"
-				WRITE_SHORT( (short)m_flRoomtype );					// sequence number
-			MESSAGE_END();
+			// New room type is sent to player in CBasePlayer::UpdateClientData.
 
 			// crank up nextthink rate for new active sound entity
 			// by falling through to think_fast...
@@ -980,6 +1195,81 @@ void CEnvSound::Spawn()
 	pev->nextthink = gpGlobals->time + RANDOM_FLOAT( 0.0f, 0.5f ); 
 }
 
+//=====================
+//LRC - trigger_sound
+//=====================
+class CTriggerSound : public CBaseDelay
+{
+public:
+	void KeyValue( KeyValueData* pkvd) override;
+	void Spawn() override;
+	void Touch( CBaseEntity *pOther ) override;
+
+	int		Save( CSave &save ) override;
+	int		Restore( CRestore &restore ) override;
+	static	TYPEDESCRIPTION m_SaveData[];
+	int	ObjectCaps() override { return CBaseDelay :: ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
+
+	int m_Roomtype;
+	string_t m_iszMaster;
+};
+
+LINK_ENTITY_TO_CLASS( trigger_sound, CTriggerSound )
+
+TYPEDESCRIPTION	CTriggerSound::m_SaveData[] =
+{
+	DEFINE_FIELD( CTriggerSound, m_Roomtype, FIELD_INTEGER ),
+	DEFINE_FIELD( CTriggerSound, m_iszMaster, FIELD_STRING ),
+};
+
+IMPLEMENT_SAVERESTORE( CTriggerSound, CBaseDelay )
+
+void CTriggerSound::KeyValue( KeyValueData *pkvd )
+{
+	if (FStrEq(pkvd->szKeyName, "roomtype"))
+	{
+		m_Roomtype = atoi(pkvd->szValue);
+		pkvd->fHandled = true;
+	}
+	else if (FStrEq(pkvd->szKeyName, "master"))
+	{
+		m_iszMaster = ALLOC_STRING(pkvd->szValue);
+		pkvd->fHandled = true;
+	}
+	else
+		CBaseEntity::KeyValue( pkvd );
+}
+
+void CTriggerSound::Touch( CBaseEntity *pOther )
+{
+	if (!UTIL_IsMasterTriggered(m_iszMaster, pOther)) return;
+
+	if (pOther->IsPlayer())
+	{
+		CBasePlayer *pPlayer = (CBasePlayer*)pOther;
+		if (pPlayer->m_pentSndLast != this->edict())
+		{
+			pPlayer->m_pentSndLast = ENT(pev);
+			pPlayer->m_SndRoomtype = m_Roomtype;
+			pPlayer->m_flSndRange = 0;
+
+			MESSAGE_BEGIN( MSG_ONE, SVC_ROOMTYPE, NULL, pPlayer->edict() );		// use the magic #1 for "one client"
+				WRITE_SHORT( (short)m_Roomtype );					// sequence number
+			MESSAGE_END();
+
+			SUB_UseTargets(pPlayer);
+		}
+	}
+}
+
+void CTriggerSound::Spawn()
+{
+	pev->solid = SOLID_TRIGGER;
+	pev->movetype = MOVETYPE_NONE;
+	SET_MODEL(ENT(pev), STRING(pev->model));    // set size and link into world
+	SetBits( pev->effects, EF_NODRAW );
+}
+
 // ==================== SENTENCE GROUPS, UTILITY FUNCTIONS  ======================================
 
 #define CSENTENCE_LRU_MAX	32		// max number of elements per sentence group
@@ -993,11 +1283,11 @@ typedef struct sentenceg
 	unsigned char rgblru[CSENTENCE_LRU_MAX];
 } SENTENCEG;
 
-#define CSENTENCEG_MAX 200					// max number of sentence groups
+#define CSENTENCEG_MAX 256					// max number of sentence groups
 // globals
 
 SENTENCEG rgsentenceg[CSENTENCEG_MAX];
-int fSentencesInit = FALSE;
+bool fSentencesInit = false;
 
 char gszallsentencenames[CVOXFILESENTENCEMAX][CBSENTENCENAME_MAX];
 int gcallsentences = 0;
@@ -1035,7 +1325,7 @@ void USENTENCEG_InitLRU( unsigned char *plru, int count )
 // ipick 'next' is returned.  
 // return of -1 indicates an error.
 
-int USENTENCEG_PickSequential( int isentenceg, char *szfound, int ipick, int freset )
+int USENTENCEG_PickSequential( int isentenceg, char *szfound, int ipick, bool freset )
 {
 	const char *szgroupname;
 	unsigned char count;
@@ -1084,7 +1374,7 @@ int USENTENCEG_Pick( int isentenceg, char *szfound )
 	unsigned char i;
 	unsigned char count;
 	unsigned char ipick;
-	int ffound = FALSE;
+	bool ffound = false;
 
 	if( !fSentencesInit )
 		return -1;
@@ -1103,7 +1393,7 @@ int USENTENCEG_Pick( int isentenceg, char *szfound )
 			{
 				ipick = plru[i];
 				plru[i] = 0xFF;
-				ffound = TRUE;
+				ffound = true;
 				break;
 			}
 
@@ -1166,7 +1456,7 @@ int SENTENCEG_PlayRndI( edict_t *entity, int isentenceg, float volume, float att
 
 // same as above, but takes sentence group name instead of index
 
-int SENTENCEG_PlayRndSz( edict_t *entity, const char *szgroupname, float volume, float attenuation, int flags, int pitch )
+static int SENTENCEG_PlayRndSzImpl( edict_t *entity, const char *szgroupname, float volume, float attenuation, int flags, int pitch, int channel = 0, bool subtitle = false, int holdTime = 0 )
 {
 	char name[64];
 	int ipick;
@@ -1180,20 +1470,37 @@ int SENTENCEG_PlayRndSz( edict_t *entity, const char *szgroupname, float volume,
 	isentenceg = SENTENCEG_GetIndex( szgroupname );
 	if( isentenceg < 0 )
 	{
-		ALERT( at_console, "No such sentence group %s\n", szgroupname );
+		if (!FBitSet(flags, SND_DONT_REPORT_MISSING))
+			ALERT( at_console, "No such sentence group %s\n", szgroupname );
 		return -1;
 	}
 
 	ipick = USENTENCEG_Pick( isentenceg, name );
 	if( ipick >= 0 && name[0] )
-		EMIT_SOUND_DYN( entity, CHAN_VOICE, name, volume, attenuation, flags, pitch );
+	{
+		ClearBits(flags, SND_DONT_REPORT_MISSING);
+		if (subtitle)
+			EMIT_SOUND_DYN_SUB( entity, channel ? channel : CHAN_VOICE, name, volume, attenuation, flags, pitch, holdTime );
+		else
+			EMIT_SOUND_DYN( entity, channel ? channel : CHAN_VOICE, name, volume, attenuation, flags, pitch );
+	}
 
 	return ipick;
 }
 
+int SENTENCEG_PlayRndSz( edict_t *entity, const char *szgroupname, float volume, float attenuation, int flags, int pitch, int channel )
+{
+	return SENTENCEG_PlayRndSzImpl(entity, szgroupname, volume, attenuation, flags, pitch, channel, false, 0);
+}
+
+int SENTENCEG_PlayRndSzSub( edict_t *entity, const char *szgroupname, float volume, float attenuation, int flags, int pitch, int holdTime )
+{
+	return SENTENCEG_PlayRndSzImpl(entity, szgroupname, volume, attenuation, flags, pitch, 0, true, holdTime);
+}
+
 // play sentences in sequential order from sentence group.  Reset after last sentence.
 
-int SENTENCEG_PlaySequentialSz( edict_t *entity, const char *szgroupname, float volume, float attenuation, int flags, int pitch, int ipick, int freset )
+int SENTENCEG_PlaySequentialSz( edict_t *entity, const char *szgroupname, float volume, float attenuation, int flags, int pitch, int ipick, bool freset )
 {
 	char name[64];
 	int ipicknext;
@@ -1283,7 +1590,7 @@ void SENTENCEG_Init()
 
 		if( gcallsentences >= CVOXFILESENTENCEMAX )
 		{
-			ALERT( at_error, "Too many sentences in sentences.txt! >%d\n", gcallsentences );
+			ALERT( at_error, "Too many sentences in sentences.txt! >%d\n", CVOXFILESENTENCEMAX );
 			break;
 		}
 
@@ -1339,6 +1646,9 @@ void SENTENCEG_Init()
 		}
 	}
 
+	ALERT(at_aiconsole, "Number of sentence groups: %d/%d\n", isentencegs, CSENTENCEG_MAX);
+	ALERT(at_aiconsole, "Number of sentences: %d out of max %d (on GoldSource) and %d (on Xash3D)\n", gcallsentences, CVOXFILESENTENCEMAX_GOLDSOURCE_ANNIVERSARY_25, CVOXFILESENTENCEMAX_XASH3D);
+
 	g_engfuncs.pfnFreeFile( pMemFile );
 
 	if( gcallsentences > CVOXFILESENTENCEMAX_GOLDSOURCE_ANNIVERSARY_25 )
@@ -1350,7 +1660,7 @@ void SENTENCEG_Init()
 		ALERT( at_warning, "NOTE: this mod might not work properly under GoldSource (pre-anniversary update) engine: more than %d sentences\n", CVOXFILESENTENCEMAX_GOLDSOURCE_LEGACY );
 	}
 
-	fSentencesInit = TRUE;
+	fSentencesInit = true;
 
 	// init lru lists
 
@@ -1384,18 +1694,39 @@ int SENTENCEG_Lookup( const char *sample, char *sentencenum )
 	return -1;
 }
 
-void EMIT_SOUND_DYN( edict_t *entity, int channel, const char *sample, float volume, float attenuation, int flags, int pitch )
+static bool EMIT_SOUND_DYN_IMPL(edict_t *entity, int channel, const char *sample, float volume, float attenuation, int flags, int pitch, bool subtitle = false, int holdTime = 0)
 {
 	if( sample && *sample == '!' )
 	{
 		char name[32];
 		if( SENTENCEG_Lookup( sample, name ) >= 0 )
+		{
+			if (subtitle)
+				UTIL_ShowCaption(sample, holdTime, false);
 			EMIT_SOUND_DYN2( entity, channel, name, volume, attenuation, flags, pitch );
+			return true;
+		}
 		else
+		{
 			ALERT( at_aiconsole, "Unable to find %s in sentences.txt\n", sample );
+			return false;
+		}
 	}
 	else
+	{
 		EMIT_SOUND_DYN2( entity, channel, sample, volume, attenuation, flags, pitch );
+		return true;
+	}
+}
+
+bool EMIT_SOUND_DYN( edict_t *entity, int channel, const char *sample, float volume, float attenuation, int flags, int pitch )
+{
+	return EMIT_SOUND_DYN_IMPL(entity, channel, sample, volume, attenuation, flags, pitch);
+}
+
+bool EMIT_SOUND_DYN_SUB(edict_t *entity, int channel, const char *sample, float volume, float attenuation, int flags, int pitch , int holdTime)
+{
+	return EMIT_SOUND_DYN_IMPL(entity, channel, sample, volume, attenuation, flags, pitch, true, holdTime);
 }
 
 // play a specific sentence over the HEV suit speaker - just pass player entity, and !sentencename
@@ -1453,60 +1784,11 @@ void EMIT_GROUPNAME_SUIT( edict_t *entity, const char *groupname )
 // save in array.  Only works first time called, 
 // ignored on subsequent calls.
 
-static char *memfgets( byte *pMemFile, int fileSize, int &filePos, char *pBuffer, int bufferSize )
-{
-	// Bullet-proofing
-	if( !pMemFile || !pBuffer )
-		return NULL;
-
-	if( filePos >= fileSize )
-		return NULL;
-
-	int i = filePos;
-	int last = fileSize;
-
-	// fgets always NULL terminates, so only read bufferSize-1 characters
-	if( last - filePos > ( bufferSize - 1 ) )
-		last = filePos + ( bufferSize - 1 );
-
-	int stop = 0;
-
-	// Stop at the next newline (inclusive) or end of buffer
-	while( i < last && !stop )
-	{
-		if( pMemFile[i] == '\n' )
-			stop = 1;
-		i++;
-	}
-
-	// If we actually advanced the pointer, copy it over
-	if( i != filePos )
-	{
-		// We read in size bytes
-		int size = i - filePos;
-		// copy it out
-		memcpy( pBuffer, pMemFile + filePos, sizeof(byte) * size );
-
-		// If the buffer isn't full, terminate (this is always true)
-		if( size < bufferSize )
-			pBuffer[size] = 0;
-
-		// Update file pointer
-		filePos = i;
-		return pBuffer;
-	}
-
-	// No data read, bail
-	return NULL;
-}
-
 // given texture name, find texture type
 // if not found, return type 'concrete'
 
 // NOTE: this routine should ONLY be called if the 
 // current texture under the player changes!
-
-extern "C" char PM_FindTextureType( char *name );
 
 char TEXTURETYPE_Find( char *name )
 {
@@ -1514,10 +1796,10 @@ char TEXTURETYPE_Find( char *name )
 }
 
 // play a strike sound based on the texture that was hit by the attack traceline.  VecSrc/VecEnd are the
-// original traceline endpoints used by the attacker, iBulletType is the type of bullet that hit the texture.
+// original traceline endpoints used by the attacker.
 // returns volume of strike instrument (crowbar) to play
 
-float TEXTURETYPE_PlaySound( TraceResult *ptr,  Vector vecSrc, Vector vecEnd, int iBulletType )
+float TEXTURETYPE_PlaySound( TraceResult *ptr,  Vector vecSrc, Vector vecEnd, bool ignoreFlesh )
 {
 	// hit the world, try to play sound based on texture material type
 	char chTextureType;
@@ -1527,9 +1809,6 @@ float TEXTURETYPE_PlaySound( TraceResult *ptr,  Vector vecSrc, Vector vecEnd, in
 	const char *pTextureName;
 	float rgfl1[3];
 	float rgfl2[3];
-	const char *rgsz[4];
-	int cnt;
-	float fattn = ATTN_NORM;
 
 	if( !g_pGameRules->PlayTextureSounds() )
 		return 0.0f;
@@ -1538,9 +1817,9 @@ float TEXTURETYPE_PlaySound( TraceResult *ptr,  Vector vecSrc, Vector vecEnd, in
 
 	chTextureType = 0;
 
-	if( pEntity && pEntity->Classify() != CLASS_NONE && pEntity->Classify() != CLASS_MACHINE )
+	if( pEntity && pEntity->HasFlesh() )
 		// hit body
-		chTextureType = CHAR_TEX_FLESH;
+		chTextureType = g_MaterialRegistry.FleshMaterial();
 	else
 	{
 		// hit world
@@ -1560,15 +1839,7 @@ float TEXTURETYPE_PlaySound( TraceResult *ptr,  Vector vecSrc, Vector vecEnd, in
 
 		if( pTextureName )
 		{
-			// strip leading '-0' or '+0~' or '{' or '!'
-			if( *pTextureName == '-' || *pTextureName == '+' )
-				pTextureName += 2;
-
-			if( *pTextureName == '{' || *pTextureName == '!' || *pTextureName == '~' || *pTextureName == ' ' )
-				pTextureName++;
-			// '}}'
-			strcpy( szbuffer, pTextureName );
-			szbuffer[CBTEXTURENAMEMAX - 1] = 0;
+			GetStrippedTextureName(szbuffer, pTextureName);
 	
 			// ALERT( at_console, "texture hit: %s\n", szbuffer );
 
@@ -1577,128 +1848,37 @@ float TEXTURETYPE_PlaySound( TraceResult *ptr,  Vector vecSrc, Vector vecEnd, in
 		}
 	}
 
-	switch( chTextureType )
-	{
-	default:
-	case CHAR_TEX_CONCRETE:
-		fvol = 0.9f;
-		fvolbar = 0.6f;
-		rgsz[0] = "player/pl_step1.wav";
-		rgsz[1] = "player/pl_step2.wav";
-		cnt = 2;
-		break;
-	case CHAR_TEX_METAL:
-		fvol = 0.9f;
-		fvolbar = 0.3f;
-		rgsz[0] = "player/pl_metal1.wav";
-		rgsz[1] = "player/pl_metal2.wav";
-		cnt = 2;
-		break;
-	case CHAR_TEX_DIRT:
-		fvol = 0.9f;
-		fvolbar = 0.1f;
-		rgsz[0] = "player/pl_dirt1.wav";
-		rgsz[1] = "player/pl_dirt2.wav";
-		rgsz[2] = "player/pl_dirt3.wav";
-		cnt = 3;
-		break;
-	case CHAR_TEX_VENT:
-		fvol = 0.5f;
-		fvolbar = 0.3f;
-		rgsz[0] = "player/pl_duct1.wav";
-		rgsz[1] = "player/pl_duct1.wav";
-		cnt = 2;
-		break;
-	case CHAR_TEX_GRATE:
-		fvol = 0.9f;
-		fvolbar = 0.5f;
-		rgsz[0] = "player/pl_grate1.wav";
-		rgsz[1] = "player/pl_grate4.wav";
-		cnt = 2;
-		break;
-	case CHAR_TEX_TILE:
-		fvol = 0.8f;
-		fvolbar = 0.2f;
-		rgsz[0] = "player/pl_tile1.wav";
-		rgsz[1] = "player/pl_tile3.wav";
-		rgsz[2] = "player/pl_tile2.wav";
-		rgsz[3] = "player/pl_tile4.wav";
-		cnt = 4;
-		break;
-	case CHAR_TEX_SLOSH:
-		fvol = 0.9f;
-		fvolbar = 0.0f;
-		rgsz[0] = "player/pl_slosh1.wav";
-		rgsz[1] = "player/pl_slosh3.wav";
-		rgsz[2] = "player/pl_slosh2.wav";
-		rgsz[3] = "player/pl_slosh4.wav";
-		cnt = 4;
-		break;
-	case CHAR_TEX_WOOD:
-		fvol = 0.9f;
-		fvolbar = 0.2f;
-		rgsz[0] = "debris/wood1.wav";
-		rgsz[1] = "debris/wood2.wav";
-		rgsz[2] = "debris/wood3.wav";
-		cnt = 3;
-		break;
-	case CHAR_TEX_GLASS:
-	case CHAR_TEX_COMPUTER:
-		fvol = 0.8f;
-		fvolbar = 0.2f;
-		rgsz[0] = "debris/glass1.wav";
-		rgsz[1] = "debris/glass2.wav";
-		rgsz[2] = "debris/glass3.wav";
-		cnt = 3;
-		break;
-	case CHAR_TEX_FLESH:
-		if( iBulletType == BULLET_PLAYER_CROWBAR )
-			return 0.0f; // crowbar already makes this sound
-		fvol = 1.0f;
-		fvolbar = 0.2f;
-		rgsz[0] = "weapons/bullet_hit1.wav";
-		rgsz[1] = "weapons/bullet_hit2.wav";
-		fattn = 1.0f;
-		cnt = 2;
-		break;
-	}
+	const MaterialData* mData = g_MaterialRegistry.GetMaterialDataWithFallback(chTextureType);
+	if (!mData || mData->hit.waves.empty())
+		return 0.0f;
+
+	if (chTextureType == g_MaterialRegistry.FleshMaterial() && ignoreFlesh)
+		return 0.0f;
+
+	fvol = mData->hit.volume;
+	fvolbar = mData->hit.volumebar;
 
 	// did we hit a breakable?
-	if( pEntity && FClassnameIs( pEntity->pev, "func_breakable" ) )
+	if( pEntity && pEntity->PlaysItsOwnHitSounds() )
 	{
 		// drop volumes, the object will already play a damaged sound
 		fvol /= 1.5f;
 		fvolbar /= 2.0f;
 	}
-	else if( chTextureType == CHAR_TEX_COMPUTER )
+	else if( mData->hit.playSparks )
 	{
 		// play random spark if computer
 		if( ptr->flFraction != 1.0f && RANDOM_LONG( 0, 1 ) )
 		{
 			UTIL_Sparks( ptr->vecEndPos );
-
-			float flVolume = RANDOM_FLOAT( 0.7f, 1.0f );//random volume range
-			switch( RANDOM_LONG( 0, 1 ) )
-			{
-				case 0:
-					UTIL_EmitAmbientSound( ENT( 0 ), ptr->vecEndPos, "buttons/spark5.wav", flVolume, ATTN_NORM, 0, 100 );
-					break;
-				case 1:
-					UTIL_EmitAmbientSound( ENT( 0 ), ptr->vecEndPos, "buttons/spark6.wav", flVolume, ATTN_NORM, 0, 100 );
-					break;
-				/*case 0:
-					EMIT_SOUND( ENT( pev ), CHAN_VOICE, "buttons/spark5.wav", flVolume, ATTN_NORM );
-					break;
-				 case 1:
-					EMIT_SOUND( ENT( pev ), CHAN_VOICE, "buttons/spark6.wav", flVolume, ATTN_NORM );
-					break;*/
-			}
+			CBaseEntity* pWorld = CBaseEntity::Instance(0);
+			if (pWorld)
+				pWorld->EmitSoundScriptAmbient(ptr->vecEndPos, materialSparkSoundScript);
 		}
 	}
 
 	// play material hit sound
-	UTIL_EmitAmbientSound( ENT( 0 ), ptr->vecEndPos, rgsz[RANDOM_LONG( 0, cnt - 1 )], fvol, fattn, 0, 96 + RANDOM_LONG( 0, 0xf ) );
-	//EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_WEAPON, rgsz[RANDOM_LONG( 0, cnt - 1 )], fvol, ATTN_NORM, 0, 96 + RANDOM_LONG( 0, 0xf ) );
+	UTIL_EmitAmbientSound( ENT( 0 ), ptr->vecEndPos, mData->hit.waves[RANDOM_LONG(0, mData->hit.waves.size() - 1)].c_str(), fvol, mData->hit.attn, 0, 96 + RANDOM_LONG( 0, 0xf ) );
 
 	return fvolbar;
 }
@@ -1707,20 +1887,22 @@ float TEXTURETYPE_PlaySound( TraceResult *ptr,  Vector vecSrc, Vector vecEnd, in
 //
 // Speaker class. Used for announcements per level, for door lock/unlock spoken voice. 
 //
+#define SPEAKER_START_SILENT			1	// wait for trigger 'on' to start announcements
+
 class CSpeaker : public CBaseEntity
 {
 public:
-	void KeyValue( KeyValueData *pkvd );
-	void Spawn( void );
-	void Precache( void );
+	void KeyValue( KeyValueData *pkvd ) override;
+	void Spawn() override;
+	void Precache() override;
 	void EXPORT ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
-	void EXPORT SpeakerThink( void );
+	void EXPORT SpeakerThink();
 
-	virtual int Save( CSave &save );
-	virtual int Restore( CRestore &restore );
+	int Save( CSave &save ) override;
+	int Restore( CRestore &restore ) override;
 	static TYPEDESCRIPTION m_SaveData[];
 
-	virtual int ObjectCaps( void ) { return ( CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION ); }
+	int ObjectCaps() override { return ( CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION ); }
 
 	int m_preset;			// preset number
 };
@@ -1737,7 +1919,7 @@ IMPLEMENT_SAVERESTORE( CSpeaker, CBaseEntity )
 //
 // ambient_generic - general-purpose user-defined static sound
 //
-void CSpeaker::Spawn( void )
+void CSpeaker::Spawn()
 {
 	const char *szSoundFile = STRING( pev->message );
 
@@ -1763,13 +1945,13 @@ void CSpeaker::Spawn( void )
 #define ANNOUNCE_MINUTES_MIN	0.25f
 #define ANNOUNCE_MINUTES_MAX	2.25f
 
-void CSpeaker::Precache( void )
+void CSpeaker::Precache()
 {
 	if( !FBitSet( pev->spawnflags, SPEAKER_START_SILENT ) )
 		// set first announcement time for random n second
 		pev->nextthink = gpGlobals->time + RANDOM_FLOAT( 5.0f, 15.0f );
 }
-void CSpeaker::SpeakerThink( void )
+void CSpeaker::SpeakerThink()
 {
 	const char* szSoundFile = "";
 	float flvolume = pev->health * 0.1f;
@@ -1778,7 +1960,7 @@ void CSpeaker::SpeakerThink( void )
 	int pitch = 100;
 
 	// Wait for the talkmonster to finish first.
-	if( gpGlobals->time <= CTalkMonster::g_talkWaitTime )
+	if( CTalkMonster::SomeoneIsTalking() )
 	{
 		pev->nextthink = CTalkMonster::g_talkWaitTime + RANDOM_FLOAT( 5.0f, 10.0f );
 		return;
@@ -1859,9 +2041,9 @@ void CSpeaker::SpeakerThink( void )
 //
 void CSpeaker::ToggleUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
 {
-	int fActive = ( pev->nextthink > 0.0f );
+	bool fActive = ( pev->nextthink > 0.0f );
 
-	// fActive is TRUE only if an announcement is pending
+	// fActive is true only if an announcement is pending
 
 	if( useType != USE_TOGGLE )
 	{
@@ -1907,8 +2089,175 @@ void CSpeaker::KeyValue( KeyValueData *pkvd )
 	if( FStrEq( pkvd->szKeyName, "preset" ) )
 	{
 		m_preset = atoi( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	else
 		CBaseEntity::KeyValue( pkvd );
+}
+
+#define SF_SOUNDMARK_FIREONCE 1
+
+class CEnvSoundMark : public CBaseEntity
+{
+public:
+	void Spawn() override;
+	void KeyValue(KeyValueData *pkvd) override;
+	void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value) override;
+
+	int GetType() const { return pev->impulse ? pev->impulse : bits_SOUND_DANGER; }
+	int GetRadius() const { return pev->button > 0 ? pev->button : 384; }
+	float GetDuration() const { return pev->frags > 0 ? pev->frags : 0.3; }
+};
+
+LINK_ENTITY_TO_CLASS( env_soundmark, CEnvSoundMark )
+
+void CEnvSoundMark::Spawn()
+{
+	pev->effects |= EF_NODRAW;
+}
+
+void CEnvSoundMark::KeyValue(KeyValueData *pkvd)
+{
+	if( FStrEq( pkvd->szKeyName, "type" ) )
+	{
+		pev->impulse = atoi( pkvd->szValue );
+		pkvd->fHandled = true;
+	}
+	else if( FStrEq( pkvd->szKeyName, "radius" ) )
+	{
+		pev->button = atoi( pkvd->szValue );
+		pkvd->fHandled = true;
+	}
+	else if( FStrEq( pkvd->szKeyName, "duration" ) )
+	{
+		pev->frags = atof( pkvd->szValue );
+		pkvd->fHandled = true;
+	}
+	else if( FStrEq( pkvd->szKeyName, "position" ) )
+	{
+		pev->message = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = true;
+	}
+}
+
+void CEnvSoundMark::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
+{
+	Vector vecPos;
+	if (pev->message)
+	{
+		if (!TryCalcLocus_Position(this, pActivator, STRING(pev->message), vecPos))
+			return;
+	}
+	else
+		vecPos = pev->origin;
+
+	InsertAISound( GetType(), vecPos, GetRadius(), GetDuration() );
+	if (FBitSet(pev->spawnflags, SF_SOUNDMARK_FIREONCE))
+	{
+		UTIL_Remove(this);
+	}
+}
+
+class CExtraSpeaker : public CPointEntity
+{
+public:
+	void Think() override
+	{
+		// Gargbage collection
+		CBaseEntity* pOwner = nullptr;
+		if (!FNullEnt(pev->owner))
+		{
+			pOwner = CBaseEntity::Instance(pev->owner);
+		}
+		if (!pOwner)
+		{
+			ALERT(at_console, "Removing '%s' because the owner has expired\n", STRING(pev->classname));
+			UTIL_Remove(this);
+			return;
+		}
+		pev->nextthink = gpGlobals->time + 1.0f;
+	}
+};
+
+LINK_ENTITY_TO_CLASS( extra_speaker, CExtraSpeaker )
+
+CBaseEntity* GetExtraSpeakerForEntity(CBaseEntity* pTargetEntity)
+{
+	CBaseEntity* pEntity = nullptr;
+	while((pEntity = UTIL_FindEntityByClassname(pEntity, "extra_speaker")) != nullptr)
+	{
+		if (pTargetEntity->edict() == pEntity->pev->owner)
+		{
+			return pEntity;
+		}
+	}
+
+	if (!pEntity) {
+		pEntity = CBaseEntity::CreateNoSpawn("extra_speaker", pTargetEntity->pev->origin, pTargetEntity->pev->angles);
+
+		if (pEntity) {
+			ALERT(at_console, "Created '%s' for '%s'\n", STRING(pEntity->pev->classname), STRING(pTargetEntity->pev->classname));
+			pEntity->pev->movetype = MOVETYPE_FOLLOW;
+			pEntity->pev->aiment = pTargetEntity->edict();
+			pEntity->pev->owner = pTargetEntity->edict();
+			pEntity->m_EFlags |= EFLAG_PREVENT_ORIGIN_UNSETTING;
+			if (DispatchSpawnAutoClean(pEntity))
+			{
+				SET_MODEL(pEntity->edict(), "sprites/iunknown.spr");
+				pEntity->pev->rendermode = kRenderTransAlpha;
+				pEntity->pev->renderamt = 0;
+				pEntity->pev->nextthink = gpGlobals->time + 1.0f;
+			}
+		}
+	}
+
+	return pEntity;
+}
+
+class CAmbientExtraSpeaker : public CAmbientGeneric
+{
+public:
+	void Precache() override;
+	CBaseEntity* GetEntityToPlayFrom(CBaseEntity *pActivator) override;
+	bool EntityToPlayFromIsDefined() override { return true; }
+
+protected:
+	CBaseEntity* GetTargetEntity(CBaseEntity* pActivator);
+};
+
+LINK_ENTITY_TO_CLASS( ambient_extraspeaker, CAmbientExtraSpeaker )
+
+void CAmbientExtraSpeaker::Precache()
+{
+	PRECACHE_MODEL("sprites/iunknown.spr");
+	CAmbientGeneric::Precache();
+}
+
+CBaseEntity* CAmbientExtraSpeaker::GetEntityToPlayFrom(CBaseEntity *pActivator)
+{
+	CBaseEntity* pTargetEntity = GetTargetEntity(pActivator);
+	if (!pTargetEntity)
+		return nullptr;
+
+	CBaseEntity* pSpeakerEntity = GetExtraSpeakerForEntity(pTargetEntity);
+	if (pSpeakerEntity)
+	{
+		pSpeakerEntity->pev->movetype = MOVETYPE_FOLLOW;
+		pSpeakerEntity->pev->aiment = pTargetEntity->edict();
+	}
+	return pSpeakerEntity;
+}
+
+CBaseEntity* CAmbientExtraSpeaker::GetTargetEntity(CBaseEntity *pActivator)
+{
+	CBaseEntity* pTargetEntity = nullptr;
+	if (FStringNull(pev->target))
+	{
+		pTargetEntity = g_pGameRules->EffectivePlayer(pActivator);
+	}
+	else
+	{
+		pTargetEntity = UTIL_FindEntityByTargetname(nullptr, STRING(pev->target), pActivator);
+	}
+	return pTargetEntity;
 }

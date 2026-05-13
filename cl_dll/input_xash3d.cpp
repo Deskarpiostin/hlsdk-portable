@@ -43,7 +43,7 @@ cvar_t	*cl_laddermode;
 #define IMPULSE_DOWN	2
 #define IMPULSE_UP		4
 
-int CL_IsDead( void );
+int CL_IsDead();
 extern Vector dead_viewangles;
 
 /*
@@ -57,11 +57,11 @@ float IN_GetMouseSensitivity()
 	// Absurdly high sensitivity values can cause the game to hang, so clamp
 	if( sensitivity->value > 10000.0 )
 	{
-		gEngfuncs.Cvar_SetValue( "sensitivity", 10000.0 );
+		gEngfuncs.Cvar_SetValue( "sensitivity", 10000.0f );
 	}
-	else if( sensitivity->value < 0.01 )
+	else if( sensitivity->value < 0.01f )
 	{
-		gEngfuncs.Cvar_SetValue( "sensitivity", 0.01 );
+		gEngfuncs.Cvar_SetValue( "sensitivity", 0.01f );
 	}
 	return sensitivity->value;
 }
@@ -200,11 +200,10 @@ void FWGSInput::IN_Move( float frametime, usercmd_t *cmd )
 			viewangles[YAW] -= ac_sidemove * 5;
 		ac_sidemove = 0;
 	}
-#if !USE_VGUI || USE_NOVGUI_MOTD
-	if( gHUD.m_MOTD.m_bShow )
+	//TODO: scroll on phones
+	/*if( gHUD.m_MOTD.m_bShow )
 		gHUD.m_MOTD.scroll += rel_pitch;
-	else
-#endif
+	else*/
 		viewangles[PITCH] += rel_pitch;
 
 	if( viewangles[PITCH] > cl_pitchdown->value )
@@ -261,37 +260,37 @@ void FWGSInput::IN_MouseEvent( int mstate )
 
 // Stubs
 
-void FWGSInput::IN_ClearStates( void )
+void FWGSInput::IN_ClearStates()
 {
 	//gEngfuncs.Con_Printf( "IN_ClearStates\n" );
 }
 
-void FWGSInput::IN_ActivateMouse( void )
+void FWGSInput::IN_ActivateMouse()
 {
 	//gEngfuncs.Con_Printf( "IN_ActivateMouse\n" );
 }
 
-void FWGSInput::IN_DeactivateMouse( void )
+void FWGSInput::IN_DeactivateMouse()
 {
 	//gEngfuncs.Con_Printf( "IN_DeactivateMouse\n" );
 }
 
-void FWGSInput::IN_Accumulate( void )
+void FWGSInput::IN_Accumulate()
 {
 	//gEngfuncs.Con_Printf( "IN_Accumulate\n" );
 }
 
-void FWGSInput::IN_Commands( void )
+void FWGSInput::IN_Commands()
 {
 	//gEngfuncs.Con_Printf( "IN_Commands\n" );
 }
 
-void FWGSInput::IN_Shutdown( void )
+void FWGSInput::IN_Shutdown()
 {
 }
 
 // Register cvars and reset data
-void FWGSInput::IN_Init( void )
+void FWGSInput::IN_Init()
 {
 	sensitivity = gEngfuncs.pfnRegisterVariable( "sensitivity", "3", FCVAR_ARCHIVE | FCVAR_FILTERSTUFFTEXT );
 	in_joystick = gEngfuncs.pfnRegisterVariable( "joystick", "0", FCVAR_ARCHIVE );

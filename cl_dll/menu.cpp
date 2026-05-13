@@ -21,8 +21,7 @@
 #include "hud.h"
 #include "cl_util.h"
 #include "parsemsg.h"
-#include <string.h>
-#include <stdio.h>
+#include "string_utils.h"
 
 #if USE_VGUI
 #include "vgui_TeamFortressViewport.h"
@@ -36,7 +35,7 @@ int KB_ConvertString( char *in, char **ppout );
 
 DECLARE_MESSAGE( m_Menu, ShowMenu )
 
-int CHudMenu::Init( void )
+int CHudMenu::Init()
 {
 	gHUD.AddHudElem( this );
 
@@ -47,7 +46,7 @@ int CHudMenu::Init( void )
 	return 1;
 }
 
-void CHudMenu::InitHUDData( void )
+void CHudMenu::InitHUDData()
 {
 	m_fMenuDisplayed = 0;
 	m_bitsValidSlots = 0;
@@ -55,13 +54,13 @@ void CHudMenu::InitHUDData( void )
 	Reset();
 }
 
-void CHudMenu::Reset( void )
+void CHudMenu::Reset()
 {
 	g_szPrelocalisedMenuString[0] = 0;
-	m_fWaitingForMore = FALSE;
+	m_fWaitingForMore = false;
 }
 
-int CHudMenu::VidInit( void )
+int CHudMenu::VidInit()
 {
 	return 1;
 }
@@ -82,7 +81,8 @@ int CHudMenu::VidInit( void )
 =================================
 */
 
-static int menu_r, menu_g, menu_b, menu_x, menu_ralign;
+static int menu_r, menu_g, menu_b, menu_x;
+bool menu_ralign;
 
 static inline const char* ParseEscapeToken( const char* token )
 {
@@ -122,7 +122,7 @@ static inline const char* ParseEscapeToken( const char* token )
 
 	case 'R':
 		menu_x = ScreenWidth / 2;
-		menu_ralign = TRUE;
+		menu_ralign = true;
 		break;
 	}
 
@@ -172,7 +172,7 @@ int CHudMenu::Draw( float flTime )
 	menu_g		= 255;
 	menu_b		= 255;
 	menu_x		= 20;
-	menu_ralign	= FALSE;
+	menu_ralign	= false;
 
 	const char* sptr = g_szMenuString;
 
@@ -182,7 +182,7 @@ int CHudMenu::Draw( float flTime )
 			sptr = ParseEscapeToken( sptr );
 		else if( *sptr == '\n' )
 		{
-			menu_ralign	= FALSE;
+			menu_ralign	= false;
 			menu_x 		= 20;
 			y += nFontHeight;
 			sptr++;
@@ -193,7 +193,7 @@ int CHudMenu::Draw( float flTime )
 			const char *ptr = sptr;
 			while( *sptr != '\0' && *sptr != '\n' && *sptr != '\\' )
 				sptr++;
-			strlcpy( menubuf, ptr, Q_min(( sptr - ptr + 1 ), (int)sizeof( menubuf )));
+			strncpyEnsureTermination( menubuf, ptr, Q_min(( sptr - ptr + 1 ), (int)sizeof( menubuf )));
 			if( menu_ralign )
 				// IMPORTANT: Right-to-left rendered text does not parse escape tokens!
 				menu_x = gHUD.DrawHudStringReverse( menu_x, y, 0, menubuf, menu_r, menu_g, menu_b );
@@ -246,23 +246,23 @@ int CHudMenu::MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 	{
 		if( !m_fWaitingForMore ) // this is the start of a new menu
 		{
-			strlcpy( g_szPrelocalisedMenuString, READ_STRING(), MAX_MENU_STRING );
+			strncpyEnsureTermination( g_szPrelocalisedMenuString, READ_STRING() );
 		}
 		else
 		{
 			// append to the current menu string
-			strlcat( g_szPrelocalisedMenuString, READ_STRING(), MAX_MENU_STRING );
+			strcatEnsureTermination( g_szPrelocalisedMenuString, READ_STRING() );
 		}
 
 		if( !NeedMore )
 		{
 			// we have the whole string, so we can localise it now
-			strlcpy( g_szMenuString, gHUD.m_TextMessage.BufferedLocaliseTextString( g_szPrelocalisedMenuString ), MAX_MENU_STRING );
+			strncpyEnsureTermination( g_szMenuString, gHUD.m_TextMessage.BufferedLocaliseTextString( g_szPrelocalisedMenuString ) );
 
 			// Swap in characters
 			if( KB_ConvertString( g_szMenuString, &temp ) )
 			{
-				strlcpy( g_szMenuString, temp, MAX_MENU_STRING );
+				strncpyEnsureTermination( g_szMenuString, temp );
 				free( temp );
 			}
 		}
@@ -276,7 +276,7 @@ int CHudMenu::MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 		m_iFlags &= ~HUD_ACTIVE;
 	}
 
-	m_fWaitingForMore = NeedMore;
+	m_fWaitingForMore = NeedMore != 0;
 
 	return 1;
 }

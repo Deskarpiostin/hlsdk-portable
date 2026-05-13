@@ -16,6 +16,8 @@
 #if !defined(EFFECTS_H)
 #define EFFECTS_H
 
+#include "cbase.h"
+
 #define SF_BEAM_STARTON			0x0001
 #define SF_BEAM_TOGGLE			0x0002
 #define SF_BEAM_RANDOM			0x0004
@@ -25,28 +27,34 @@
 #define SF_BEAM_DECALS			0x0040
 #define SF_BEAM_SHADEIN			0x0080
 #define SF_BEAM_SHADEOUT		0x0100
+#define SF_BEAM_SOLID			0x0200
+#define SF_BEAM_SINE			0x0400
+#define SF_BEAM_NO_PUNCH		0x1000
 #define SF_BEAM_TEMPORARY		0x8000
 
 #define SF_SPRITE_STARTON		0x0001
 #define SF_SPRITE_ONCE			0x0002
+#define SF_SPRITE_ONCE_AND_REMOVE	0x0004
+#define SF_SPRITE_DONT_MESS_YAW	0x0008
 #define SF_SPRITE_TEMPORARY		0x8000
 
 class CSprite : public CPointEntity
 {
 public:
-	void Spawn( void );
-	void Precache( void );
+	void Spawn() override;
+	void Precache() override;
+	void Activate() override;
 
-	int ObjectCaps( void )
+	int ObjectCaps() override
 	{ 
 		int flags = 0;
 		if( pev->spawnflags & SF_SPRITE_TEMPORARY )
 			flags = FCAP_DONT_SAVE;
 		return ( CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION ) | flags; 
 	}
-	void EXPORT AnimateThink( void );
-	void EXPORT ExpandThink( void );
-	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+	void EXPORT AnimateThink();
+	void EXPORT ExpandThink();
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value ) override;
 	void Animate( float frames );
 	void Expand( float scaleSpeed, float fadeSpeed );
 	void SpriteInit( const char *pSpriteName, const Vector &origin );
@@ -61,9 +69,10 @@ public:
 			pev->movetype = MOVETYPE_FOLLOW;
 		}
 	}
-	void TurnOff( void );
-	void TurnOn( void );
-	inline float Frames( void )
+	void TurnOff();
+	void TurnOn();
+	void AttachToEntity();
+	inline float Frames()
 	{
 		return m_maxFrame;
 	}
@@ -108,14 +117,22 @@ public:
 		pev->nextthink = gpGlobals->time; 
 	}
 
-	void EXPORT AnimateUntilDead( void );
+	inline void AnimateForDurationAndDie(float duration)
+	{
+		SetThink(&CSprite::AnimateUntilDead);
+		pev->dmgtime = gpGlobals->time + duration;
+		pev->nextthink = gpGlobals->time;
+	}
 
-	virtual int Save( CSave &save );
-	virtual int Restore( CRestore &restore );
+	void EXPORT AnimateUntilDead();
+
+	int Save( CSave &save ) override;
+	int Restore( CRestore &restore ) override;
 	static TYPEDESCRIPTION m_SaveData[];
-	static CSprite *SpriteCreate( const char *pSpriteName, const Vector &origin, BOOL animate );
+	static CSprite *SpriteCreate(const char *pSpriteName, const Vector &origin);
+	static CSprite *SpriteCreateAndAnimate(const char *pSpriteName, const Vector &origin, float framerate);
+	static CSprite *SpriteCreateAndAnimateOnce(const char *pSpriteName, const Vector &origin, float framerate);
 
-private:
 	float m_lastTime;
 	float m_maxFrame;
 };
@@ -123,9 +140,9 @@ private:
 class CBeam : public CBaseEntity
 {
 public:
-	void Spawn( void );
-	void Precache( void );
-	int ObjectCaps( void )
+	void Spawn() override;
+	void Precache() override;
+	int ObjectCaps() override
 	{ 
 		int flags = 0;
 		if( pev->spawnflags & SF_BEAM_TEMPORARY )
@@ -207,42 +224,42 @@ public:
 		pev->animtime = speed;
 	}
 
-	inline int GetType( void )
+	inline int GetType()
 	{
 		return pev->rendermode & 0x0F;
 	}
 
-	inline int GetFlags( void )
+	inline int GetFlags()
 	{
 		return pev->rendermode & 0xF0;
 	}
 
-	inline int GetStartEntity( void )
+	inline int GetStartEntity()
 	{
 		return pev->sequence & 0xFFF;
 	}
 
-	inline int GetEndEntity( void )
+	inline int GetEndEntity()
 	{
 		return pev->skin & 0xFFF;
 	}
 
-	const Vector &GetStartPos( void );
-	const Vector &GetEndPos( void );
+	const Vector &GetStartPos();
+	const Vector &GetEndPos();
 
-	Vector Center( void ) { return (GetStartPos() + GetEndPos()) * 0.5; }; // center point of beam
+	Vector Center() override { return (GetStartPos() + GetEndPos()) * 0.5; } // center point of beam
 
-	inline int GetTexture( void )
+	inline int GetTexture()
 	{
 		return pev->modelindex;
 	}
 
-	inline int GetWidth( void )
+	inline int GetWidth()
 	{
 		return (int)pev->scale;
 	}
 
-	inline int GetNoise( void )
+	inline int GetNoise()
 	{
 		return pev->body;
 	}
@@ -254,33 +271,33 @@ public:
 		pev->rendercolor.z = b;
 	}*/
 
-	inline int GetBrightness( void )
+	inline int GetBrightness()
 	{
 		return (int)pev->renderamt;
 	}
 
-	inline int GetFrame( void )
+	inline int GetFrame()
 	{
 		return (int)pev->frame;
 	}
 
-	inline int GetScrollRate( void )
+	inline int GetScrollRate()
 	{
 		return (int)pev->animtime;
 	}
 
 	// Call after you change start/end positions
-	void		RelinkBeam( void );
-	//void		SetObjectCollisionBox( void );
+	void		RelinkBeam();
+	//void		SetObjectCollisionBox();
 
 	void		DoSparks( const Vector &start, const Vector &end );
 	CBaseEntity *RandomTargetname( const char *szName );
-	void		BeamDamage( TraceResult *ptr );
+	void		BeamDamage( TraceResult *ptr, entvars_t *pevAttacker = NULL );
 	// Init after BeamCreate()
 	void		BeamInit( const char *pSpriteName, int width );
 	void		PointsInit( const Vector &start, const Vector &end );
-	void		PointEntInit( const Vector &start, int endIndex );
-	void		EntsInit( int startIndex, int endIndex );
+	void		PointEntInit( const Vector &start, int endIndex, int endAttachment = 0 );
+	void		EntsInit(int startIndex, int endIndex, int startAttachment = 0, int endAttachment = 0 );
 	void		HoseInit( const Vector &start, const Vector &direction );
 
 	static CBeam *BeamCreate( const char *pSpriteName, int width );
@@ -305,24 +322,41 @@ public:
 class CLaser : public CBeam
 {
 public:
-	void	Spawn( void );
-	void	Precache( void );
-	void	KeyValue( KeyValueData *pkvd );
+	void	Spawn() override;
+	void	Precache() override;
+	void	KeyValue( KeyValueData *pkvd ) override;
 
-	void	TurnOn( void );
-	void	TurnOff( void );
-	int	IsOn( void );
+	CSprite* CreateTerminalSprite(string_t spriteName);
+	void	TurnOn();
+	void	TurnOff();
+	int	IsOn();
 
-	void	FireAtPoint( TraceResult &point );
+	void	FireAtPoint( TraceResult &point, entvars_t *pevAttacker = NULL );
 
-	void	EXPORT StrikeThink( void );
-	void	Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
-	virtual int		Save( CSave &save );
-	virtual int		Restore( CRestore &restore );
+	void	EXPORT StrikeThink();
+	void	Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value ) override;
+	int		Save( CSave &save ) override;
+	int		Restore( CRestore &restore ) override;
 	static	TYPEDESCRIPTION m_SaveData[];
 
-	CSprite	*m_pSprite;
-	string_t	m_iszSpriteName;
+	CSprite	*m_pStartSprite;
+	CSprite	*m_pEndSprite;
+	string_t	m_iszStartSpriteName;
+	string_t	m_iszEndSpriteName;
 	Vector	m_firePosition;
 };
+
+struct BeamParams
+{
+	int texture;
+	int lifeMin;
+	int lifeMax;
+	int width;
+	int noise;
+	int red, green, blue, alpha;
+};
+
+void DrawChaoticBeam(Vector vecOrigin, Vector vecDest, const BeamParams& params);
+void DrawChaoticBeams(Vector vecOrigin, edict_t* pentIgnore, int radius, const BeamParams& params, int iBeams);
+
 #endif		//EFFECTS_H

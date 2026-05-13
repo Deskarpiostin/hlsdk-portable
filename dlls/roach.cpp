@@ -37,35 +37,72 @@
 class CRoach : public CBaseMonster
 {
 public:
-	void Spawn( void );
-	void Precache( void );
-	void SetYawSpeed( void );
-	void EXPORT MonsterThink ( void );
-	void Move( float flInterval );
+	void Spawn() override;
+	void Precache() override;
+	void SetYawSpeed() override;
+	void EXPORT MonsterThink() override;
+	void Move( float flInterval ) override;
 	void PickNewDest( int iCondition );
-	void EXPORT Touch( CBaseEntity *pOther );
-	void Killed( entvars_t *pevAttacker, int iGib );
+	void EXPORT Touch( CBaseEntity *pOther ) override;
+	KilledResult Killed( entvars_t *pevInflictor, entvars_t *pevAttacker, int iGib ) override;
 
 	float m_flLastLightLevel;
 	float m_flNextSmellTime;
-	int Classify( void );
-	void Look( int iDistance );
-	int ISoundMask( void );
+	int DefaultClassify() override;
+	void Look( int iDistance ) override;
+	int DefaultISoundMask() override;
+	Vector DefaultMinHullSize() override { return Vector( -1, -1, 0 ); }
+	Vector DefaultMaxHullSize() override { return  Vector( 1, 1, 2 ); }
+
+	int DefaultSizeForGrapple() override { return GRAPPLE_SMALL; }
+	bool IsDisplaceable() override { return true; }
+	bool IsTinyCreature() override { return true; }
+
+	void AskMoveAwayFromSpot(CBaseEntity* pSpotEntity, float minDist, bool run) override;
 
 	// UNDONE: These don't necessarily need to be save/restored, but if we add more data, it may
-	BOOL m_fLightHacked;
+	bool m_fLightHacked;
 	int m_iMode;
 	// -----------------------------
+
+	static const NamedSoundScript walkSoundScript;
+	static const NamedSoundScript dieSoundScript;
+	static const NamedSoundScript smashSoundScript;
 };
 
 LINK_ENTITY_TO_CLASS( monster_cockroach, CRoach )
+
+const NamedSoundScript CRoach::walkSoundScript = {
+	CHAN_BODY,
+	{"roach/rch_walk.wav"},
+	IntRange(80, 119),
+	"Roach.Walk"
+};
+
+const NamedSoundScript CRoach::dieSoundScript = {
+	CHAN_VOICE,
+	{"roach/rch_die.wav"},
+	0.8f,
+	ATTN_NORM,
+	IntRange(80, 119),
+	"Roach.Die"
+};
+
+const NamedSoundScript CRoach::smashSoundScript = {
+	CHAN_BODY,
+	{"roach/rch_smash.wav"},
+	0.7f,
+	ATTN_NORM,
+	IntRange(80, 119),
+	"Roach.Smash"
+};
 
 //=========================================================
 // ISoundMask - returns a bit mask indicating which types
 // of sounds this monster regards. In the base class implementation,
 // monsters care about all sounds, but no scents.
 //=========================================================
-int CRoach::ISoundMask( void )
+int CRoach::DefaultISoundMask()
 {
 	return bits_SOUND_CARCASS | bits_SOUND_MEAT;
 }
@@ -74,7 +111,7 @@ int CRoach::ISoundMask( void )
 // Classify - indicates this monster's place in the 
 // relationship table.
 //=========================================================
-int CRoach::Classify( void )
+int CRoach::DefaultClassify()
 {
 	return CLASS_INSECT;
 }
@@ -98,14 +135,14 @@ void CRoach::Touch( CBaseEntity *pOther )
 	// This isn't really blood.  So you don't have to screen it out based on violence levels (UTIL_ShouldShowBlood())
 	UTIL_DecalTrace( &tr, DECAL_YBLOOD1 + RANDOM_LONG( 0, 5 ) );
 
-	TakeDamage( pOther->pev, pOther->pev, pev->health, DMG_CRUSH );
+	TakeDamage( pOther->pev, pOther->pev, DamageInfo(pev->health, DMG_CRUSH) );
 }
 
 //=========================================================
 // SetYawSpeed - allows each sequence to have a different
 // turn rate associated with it.
 //=========================================================
-void CRoach::SetYawSpeed( void )
+void CRoach::SetYawSpeed()
 {
 	int ys;
 
@@ -121,15 +158,15 @@ void CRoach::Spawn()
 {
 	Precache();
 
-	SET_MODEL( ENT( pev ), "models/roach.mdl" );
-	UTIL_SetSize( pev, Vector( -1, -1, 0 ), Vector( 1, 1, 2 ) );
+	SetMyModel( "models/roach.mdl" );
+	SetMySize();
 
 	pev->solid = SOLID_SLIDEBOX;
 	pev->movetype = MOVETYPE_STEP;
-	m_bloodColor = BLOOD_COLOR_YELLOW;
+	SetMyBloodColor( BLOOD_COLOR_YELLOW );
 	pev->effects = 0;
-	pev->health = 1;
-	m_flFieldOfView = 0.5;// indicates the width of this monster's forward view cone ( as a dotproduct result )
+	SetMyHealth( 1 );
+	SetMyFieldOfView(0.5f);// indicates the width of this monster's forward view cone ( as a dotproduct result )
 	m_MonsterState = MONSTERSTATE_NONE;
 
 	MonsterInit();
@@ -137,7 +174,7 @@ void CRoach::Spawn()
 
 	pev->view_ofs = Vector( 0, 0, 1 );// position of the eyes relative to monster's origin.
 	pev->takedamage = DAMAGE_YES;
-	m_fLightHacked = FALSE;
+	m_fLightHacked = false;
 	m_flLastLightLevel = -1;
 	m_iMode = ROACH_IDLE;
 	m_flNextSmellTime = gpGlobals->time;
@@ -148,46 +185,44 @@ void CRoach::Spawn()
 //=========================================================
 void CRoach::Precache()
 {
-	PRECACHE_MODEL( "models/roach.mdl" );
+	PrecacheMyModel( "models/roach.mdl" );
+	PrecacheMyGibModel();
 
-	PRECACHE_SOUND( "roach/rch_die.wav" );
-	PRECACHE_SOUND( "roach/rch_walk.wav" );
-	PRECACHE_SOUND( "roach/rch_smash.wav" );
+	RegisterAndPrecacheSoundScript(walkSoundScript);
+	RegisterAndPrecacheSoundScript(dieSoundScript);
+	RegisterAndPrecacheSoundScript(smashSoundScript);
 }
 
 //=========================================================
 // Killed.
 //=========================================================
-void CRoach::Killed( entvars_t *pevAttacker, int iGib )
+KilledResult CRoach::Killed( entvars_t *pevInflictor, entvars_t *pevAttacker, int iGib )
 {
 	pev->solid = SOLID_NOT;
 
 	//random sound
 	if( RANDOM_LONG( 0, 4 ) == 1 )
 	{
-		EMIT_SOUND_DYN( ENT( pev ), CHAN_VOICE, "roach/rch_die.wav", 0.8, ATTN_NORM, 0, 80 + RANDOM_LONG( 0, 39 ) );
+		EmitSoundScript(dieSoundScript);
 	}
 	else
 	{
-		EMIT_SOUND_DYN( ENT( pev ), CHAN_BODY, "roach/rch_smash.wav", 0.7, ATTN_NORM, 0, 80 + RANDOM_LONG( 0, 39 ) );
+		EmitSoundScript(smashSoundScript);
 	}
-	
-	CSoundEnt::InsertSound( bits_SOUND_WORLD, pev->origin, 128, 1 );
 
-	CBaseEntity *pOwner = CBaseEntity::Instance( pev->owner );
-	if( pOwner )
-	{
-		pOwner->DeathNotice( pev );
-	}
+	InsertAISound( bits_SOUND_WORLD, 128, 1 );
+
+	OnDying(true);
 	UTIL_Remove( this );
+	return KilledResult();
 }
 
 //=========================================================
 // MonsterThink, overridden for roaches.
 //=========================================================
-void CRoach::MonsterThink( void )
+void CRoach::MonsterThink()
 {
-	if( FNullEnt( FIND_CLIENT_IN_PVS( edict() ) ) )
+	if (!FBitSet(pev->spawnflags, SF_MONSTER_ACT_OUT_OF_PVS) && FNullEnt(FIND_CLIENT_IN_PVS( edict() )))
 		pev->nextthink = gpGlobals->time + RANDOM_FLOAT( 1, 1.5 );
 	else
 		pev->nextthink = gpGlobals->time + 0.1f;// keep monster thinking
@@ -199,7 +234,7 @@ void CRoach::MonsterThink( void )
 		// if light value hasn't been collection for the first time yet, 
 		// suspend the creature for a second so the world finishes spawning, then we'll collect the light level.
 		pev->nextthink = gpGlobals->time + 1;
-		m_fLightHacked = TRUE;
+		m_fLightHacked = true;
 		return;
 	}
 	else if( m_flLastLightLevel < 0 )
@@ -278,6 +313,7 @@ void CRoach::MonsterThink( void )
 			if( GETENTITYILLUM( ENT( pev ) ) <= m_flLastLightLevel )
 			{
 				SetActivity( ACT_IDLE );
+				m_iMode = ROACH_IDLE;
 				m_flLastLightLevel = GETENTITYILLUM( ENT( pev ) );// make this our new light level.
 			}
 			break;
@@ -329,7 +365,7 @@ void CRoach::PickNewDest( int iCondition )
 		flDist = 256 + ( RANDOM_LONG( 0, 255 ) );
 		vecDest = pev->origin + vecNewDir * flDist;
 
-	} while( ( vecDest - pev->origin ).Length2D() < 128 );
+	} while( ( vecDest - pev->origin ).IsLength2DLessThan(128) );
 
 	m_Route[0].vecLocation.x = vecDest.x;
 	m_Route[0].vecLocation.y = vecDest.y;
@@ -340,7 +376,7 @@ void CRoach::PickNewDest( int iCondition )
 	if( RANDOM_LONG( 0, 9 ) == 1 )
 	{
 		// every once in a while, a roach will play a skitter sound when they decide to run
-		EMIT_SOUND_DYN( ENT( pev ), CHAN_BODY, "roach/rch_walk.wav", 1, ATTN_NORM, 0, 80 + RANDOM_LONG( 0, 39 ) );
+		EmitSoundScript(walkSoundScript);
 	}
 }
 
@@ -392,7 +428,7 @@ void CRoach::Move( float flInterval )
 	if( RANDOM_LONG( 0, 149 ) == 1 && m_iMode != ROACH_SCARED_BY_LIGHT && m_iMode != ROACH_SMELL_FOOD )
 	{
 		// random skitter while moving as long as not on a b-line to get out of light or going to food
-		PickNewDest( FALSE );
+		PickNewDest( ROACH_IDLE );
 	}
 }
 
@@ -411,7 +447,7 @@ void CRoach::Look( int iDistance )
 
 	// don't let monsters outside of the player's PVS act up, or most of the interesting
 	// things will happen before the player gets there!
-	if( FNullEnt( FIND_CLIENT_IN_PVS( edict() ) ) )
+	if (!FBitSet(pev->spawnflags, SF_MONSTER_ACT_OUT_OF_PVS) && FNullEnt(FIND_CLIENT_IN_PVS( edict() )))
 	{
 		return;
 	}
@@ -452,6 +488,13 @@ void CRoach::Look( int iDistance )
 		}
 	}
 	SetConditions( iSighted );
+}
+
+void CRoach::AskMoveAwayFromSpot(CBaseEntity* pSpotEntity, float minDist, bool run)
+{
+	PickNewDest(ROACH_BORED);
+	SetActivity(ACT_WALK);
+	pev->nextthink = gpGlobals->time + 0.1f;
 }
 
 //=========================================================

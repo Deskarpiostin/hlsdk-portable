@@ -28,21 +28,24 @@
 #include "studio_util.h"
 #include "screenfade.h"
 
+#include "string_utils.h"
+#include "util_shared.h"
+
 #pragma warning(disable: 4244)
 
-extern "C" int		iJumpSpectator;
-extern "C" float	vJumpOrigin[3];
-extern "C" float	vJumpAngles[3]; 
+extern int		iJumpSpectator;
+extern float	vJumpOrigin[3];
+extern float	vJumpAngles[3];
 
 extern void V_GetInEyePos( int entity, float * origin, float * angles );
 extern void V_ResetChaseCam();
 extern void V_GetChasePos( int target, float * cl_angles, float * origin, float * angles );
 extern float * GetClientColor( int clientIndex );
 
-extern vec3_t v_origin;		// last view origin
-extern vec3_t v_angles;		// last view angle
-extern vec3_t v_cl_angles;	// last client/mouse angle
-extern vec3_t v_sim_org;	// last sim origin
+extern Vector v_origin;		// last view origin
+extern Vector v_angles;		// last view angle
+extern Vector v_cl_angles;	// last client/mouse angle
+extern Vector v_sim_org;	// last sim origin
 
 #if 0
 const char *GetSpectatorLabel( int iMode )
@@ -75,7 +78,7 @@ const char *GetSpectatorLabel( int iMode )
 
 #endif
 
-void SpectatorMode( void )
+void SpectatorMode()
 {
 	if( gEngfuncs.Cmd_Argc() <= 1 )
 	{
@@ -90,9 +93,9 @@ void SpectatorMode( void )
 		gHUD.m_Spectator.SetModes( atoi( gEngfuncs.Cmd_Argv( 1 ) ), atoi( gEngfuncs.Cmd_Argv( 2 ) )  );
 }
 
-void SpectatorSpray( void )
+void SpectatorSpray()
 {
-	vec3_t forward;
+	Vector forward;
 	char string[128];
 
 	if( !gEngfuncs.IsSpectateOnly() )
@@ -110,7 +113,7 @@ void SpectatorSpray( void )
 	}
 }
 
-void SpectatorHelp( void )
+void SpectatorHelp()
 {
 #if USE_VGUI
 	if( gViewPort )
@@ -134,7 +137,7 @@ void SpectatorHelp( void )
 	}
 }
 
-void SpectatorMenu( void )
+void SpectatorMenu()
 {
 	if( gEngfuncs.Cmd_Argc() <= 1 )
 	{
@@ -147,10 +150,10 @@ void SpectatorMenu( void )
 #endif
 }
 
-void ToggleScores( void )
+void ToggleScores()
 {
-#if USE_VGUI && !USE_NOVGUI_SCOREBOARD
-	if( gViewPort )
+#if USE_VGUI
+	if( gHUD.UseVguiScoreBoard() && gViewPort )
 	{
 		if( gViewPort->IsScoreBoardVisible() )
 		{
@@ -160,14 +163,25 @@ void ToggleScores( void )
 		{
 			gViewPort->ShowScoreBoard();
 		}
-	}
-#else
-	if (gHUD.m_Scoreboard.m_iShowscoresHeld) {
-		gHUD.m_Scoreboard.UserCmd_HideScores();
-	} else {
-		gHUD.m_Scoreboard.UserCmd_ShowScores();
+		return;
 	}
 #endif
+	if (gEngfuncs.GetMaxClients() > 1)
+	{
+		if (gHUD.m_Scoreboard.m_iShowscoresHeld) {
+			gHUD.m_Scoreboard.UserCmd_HideScores();
+		} else {
+			gHUD.m_Scoreboard.UserCmd_ShowScores();
+		}
+	}
+	else
+	{
+		if (gHUD.m_Journal.m_iShowscoresHeld) {
+			gHUD.m_Journal.UserCmd_HideJournal();
+		} else {
+			gHUD.m_Journal.UserCmd_ShowJournal();
+		}
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -208,37 +222,6 @@ int CHudSpectator::Init()
 	}
 
 	return 1;
-}
-
-//-----------------------------------------------------------------------------
-// UTIL_StringToVector originally from ..\dlls\util.cpp, slightly changed
-//-----------------------------------------------------------------------------
-void UTIL_StringToVector( float * pVector, const char *pString )
-{
-	char *pstr, *pfront, tempString[128];
-	int	j;
-
-	strlcpy( tempString, pString, sizeof( tempString ));
-
-	pstr = pfront = tempString;
-
-	for( j = 0; j < 3; j++ )		
-	{
-		pVector[j] = atof( pfront );
-
-		while( *pstr && *pstr != ' ' )
-			pstr++;
-		if( !( *pstr ) )
-			break;
-		pstr++;
-		pfront = pstr;
-	}
-
-	if( j < 2 )
-	{
-		for( j = j + 1;j < 3; j++ )
-			pVector[j] = 0;
-	}
 }
 
 int UTIL_FindEntityInMap( const char *name, float *origin, float *angle )
@@ -394,7 +377,7 @@ void CHudSpectator::SetSpectatorStartPosition()
 	iJumpSpectator = 1;	// jump anyway
 }
 
-void CHudSpectator::SetCameraView( vec3_t pos, vec3_t angle, float fov )
+void CHudSpectator::SetCameraView( Vector pos, Vector angle, float fov )
 {
 	m_FOV = fov;
 	VectorCopy( pos, vJumpOrigin );
@@ -403,7 +386,7 @@ void CHudSpectator::SetCameraView( vec3_t pos, vec3_t angle, float fov )
 	iJumpSpectator = 1;	// jump anyway
 }
 
-void CHudSpectator::AddWaypoint( float time, vec3_t pos, vec3_t angle, float fov, int flags )
+void CHudSpectator::AddWaypoint( float time, Vector pos, Vector angle, float fov, int flags )
 {
 	if( flags == 0 && time == 0.0f )
 	{
@@ -456,7 +439,7 @@ void CHudSpectator::SetWayInterpolation( cameraWayPoint_t *prev, cameraWayPoint_
 	}
 }
 
-bool CHudSpectator::GetDirectorCamera( vec3_t &position, vec3_t &angle )
+bool CHudSpectator::GetDirectorCamera( Vector &position, Vector &angle )
 {
 	float now = gHUD.m_flTime;
 	float fov = 90.0f;
@@ -467,7 +450,7 @@ bool CHudSpectator::GetDirectorCamera( vec3_t &position, vec3_t &angle )
 
 		if( ent )
 		{
-			vec3_t vt = ent->curstate.origin;
+			Vector vt = ent->curstate.origin;
 
 			if( m_ChaseEntity <= gEngfuncs.GetMaxClients())
 			{
@@ -590,7 +573,7 @@ int CHudSpectator::VidInit()
 	return 1;
 }
 
-float CHudSpectator::GetFOV( void )
+float CHudSpectator::GetFOV()
 {
 	return m_FOV;
 }
@@ -626,7 +609,7 @@ int CHudSpectator::Draw( float flTime )
 	// if user moves in map mode, change map origin
 	if( ( m_moveDelta != 0.0f ) && ( g_iUser1 != OBS_ROAMING ) )
 	{
-		vec3_t right;
+		Vector right;
 		AngleVectors( v_angles, NULL, right, NULL );
 		VectorNormalize( right );
 		VectorScale( right, m_moveDelta, right );
@@ -642,11 +625,7 @@ int CHudSpectator::Draw( float flTime )
 		return 1;
 
 	// make sure we have player info
-#if USE_VGUI
-	gViewPort->GetAllPlayersInfo();
-#else
 	gHUD.GetAllPlayersInfo();
-#endif
 	// loop through all the players and draw additional infos to their sprites on the map
 	for( int i = 0; i < MAX_PLAYERS; i++ )
 	{
@@ -670,7 +649,7 @@ int CHudSpectator::Draw( float flTime )
 
 		lx = strlen( string ) * 3; // 3 is avg. character length :)
 
-		DrawSetTextColor( color[0], color[1], color[2] );
+		gEngfuncs.pfnDrawSetTextColor( color[0], color[1], color[2] );
 		DrawConsoleString( m_vPlayerPos[i][0] - lx,m_vPlayerPos[i][1], string );
 	}
 
@@ -681,7 +660,7 @@ void CHudSpectator::DirectorMessage( int iSize, void *pbuf )
 {
 	float f1, f2;
 	char *string;
-	vec3_t	v1, v2;
+	Vector	v1, v2;
 	int	i1, i2, i3;
 
 	BEGIN_READ( pbuf, iSize );
@@ -722,13 +701,8 @@ void CHudSpectator::DirectorMessage( int iSize, void *pbuf )
 			}
 			break;
 		case DRC_CMD_CAMERA:
-			v1[0] = READ_COORD();	// position
-			v1[1] = READ_COORD();
-			v1[2] = READ_COORD();	// vJumpOrigin
-
-			v2[0] = READ_COORD();	// view angle
-			v2[1] = READ_COORD();	// vJumpAngles
-			v2[2] = READ_COORD();
+			v1 = READ_VECTOR();	// position, vJumpOrigin
+			v2 = READ_VECTOR();	// view angle, vJumpAngles
 
 			f1    = READ_BYTE();	// fov
 			i1    = READ_WORD();	// target
@@ -760,7 +734,7 @@ void CHudSpectator::DirectorMessage( int iSize, void *pbuf )
 				msg->holdtime = READ_FLOAT();	// holdtime
 				msg->fxtime = READ_FLOAT();	// fxtime;
 
-				strlcpy( m_HUDMessageText[m_lastHudMessage], READ_STRING(), 128 );
+				strncpyEnsureTermination( m_HUDMessageText[m_lastHudMessage], READ_STRING() );
 
 				msg->pMessage = m_HUDMessageText[m_lastHudMessage];
 				msg->pName = "HUD_MESSAGE";
@@ -800,13 +774,8 @@ void CHudSpectator::DirectorMessage( int iSize, void *pbuf )
 			gEngfuncs.pfnFilteredClientCmd( READ_STRING() );
 			break;
 		case DRC_CMD_CAMPATH:
-			v1[0] = READ_COORD();	// position
-			v1[1] = READ_COORD();
-			v1[2] = READ_COORD();	// vJumpOrigin
-
-			v2[0] = READ_COORD();	// view angle
-			v2[1] = READ_COORD();   // vJumpAngles
-			v2[2] = READ_COORD();
+			v1 = READ_VECTOR();	// position, vJumpOrigin
+			v2 = READ_VECTOR();	// view angle, vJumpAngles
 			f1    = READ_BYTE();	// FOV
 			i1    = READ_BYTE();	// flags
 
@@ -824,13 +793,9 @@ void CHudSpectator::DirectorMessage( int iSize, void *pbuf )
 			{
 				f1 = gHUD.m_flTime + (float)( READ_SHORT()) / 100.0f;
 
-				v1[0] = READ_COORD();	// position
-				v1[1] = READ_COORD();
-				v1[2] = READ_COORD();	// vJumpOrigin
+				v1 = READ_VECTOR();	// position, vJumpOrigin
 
-				v2[0] = READ_COORD();	// view angle
-				v2[1] = READ_COORD();   // vJumpAngles
-				v2[2] = READ_COORD();
+				v2 = READ_VECTOR();	// view angle, vJumpAngles
 				f2    = READ_BYTE();	// fov
 				i3    = READ_BYTE();	// flags
 
@@ -894,11 +859,7 @@ void CHudSpectator::FindNextPlayer( bool bReverse )
 	int iDir = bReverse ? -1 : 1; 
 
 	// make sure we have player info
-#if USE_VGUI
-	gViewPort->GetAllPlayersInfo();
-#else
 	gHUD.GetAllPlayersInfo();
-#endif
 	do
 	{
 		iCurrent += iDir;
@@ -957,11 +918,7 @@ void CHudSpectator::FindPlayer( const char *name )
 	g_iUser2 = 0;
 
 	// make sure we have player info
-#if USE_VGUI
-	gViewPort->GetAllPlayersInfo();
-#else
 	gHUD.GetAllPlayersInfo();
-#endif
 	cl_entity_t * pEnt = NULL;
 
 	for (int i = 1; i < MAX_PLAYERS; i++ )
@@ -1407,7 +1364,7 @@ void CHudSpectator::DrawOverviewLayer()
 	float screenaspect, xs, ys, xStep, yStep, x, y, z;
 	int ix, iy, i, xTiles, yTiles, frame;
 
-	qboolean	 hasMapImage = m_MapSprite ? TRUE : FALSE;
+	bool	 hasMapImage = m_MapSprite ? true : false;
 	model_t		*dummySprite = (struct model_s *)gEngfuncs.GetSpritePointer( m_hsprUnkownMap );
 
 	if( hasMapImage )
@@ -1524,7 +1481,7 @@ void CHudSpectator::DrawOverviewEntities()
 {
 	int			i, ir, ig, ib;
 	struct model_s *hSpriteModel;
-	vec3_t			origin, angles, point, forward, right, left, up, world, screen, offset;
+	Vector			origin, angles, point, forward, right, left, up, world, screen, offset;
 	float			x, y, z, r, g, b, sizeScale = 4.0f;
 	cl_entity_t *	ent;
 	float rmatrix[3][4];	// transformation matrix

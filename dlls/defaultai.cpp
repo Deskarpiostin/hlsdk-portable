@@ -22,8 +22,9 @@
 #include	"schedule.h"
 #include	"defaultai.h"
 #include	"soundent.h"
-#include	"nodes.h"
 #include	"scripted.h"
+
+extern cvar_t npc_combat_fail_schedule;
 
 //=========================================================
 // Fail
@@ -47,6 +48,37 @@ Schedule_t slFail[] =
 	},
 };
 
+Task_t tlCombatFail[] =
+{
+	{ TASK_STOP_MOVING, 0 },
+	{ TASK_SET_ACTIVITY, (float)ACT_IDLE },
+	{ TASK_WAIT_FACE_ENEMY, (float)2 },
+	{ TASK_WAIT_PVS, (float)0 },
+};
+
+Schedule_t slCombatFail[] =
+{
+	{
+		tlCombatFail,
+		ARRAYSIZE( tlCombatFail ),
+		bits_COND_CAN_ATTACK,
+		0,
+		"CombatFail"
+	},
+};
+
+Schedule_t slScriptMoveFail[] =
+{
+	{
+		tlFail,
+		ARRAYSIZE( tlFail ),
+		bits_COND_CAN_ATTACK|
+		SCRIPT_BREAK_CONDITIONS,
+		0,
+		"ScriptMoveFail"
+	},
+};
+
 //=========================================================
 //	Idle Schedules
 //=========================================================
@@ -64,6 +96,7 @@ Schedule_t slIdleStand[] =
 		ARRAYSIZE( tlIdleStand1 ),
 		bits_COND_NEW_ENEMY |
 		bits_COND_SEE_FEAR |
+		bits_COND_SCHEDULE_SUGGESTED |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_HEAR_SOUND |
@@ -73,7 +106,7 @@ Schedule_t slIdleStand[] =
 
 		bits_SOUND_COMBAT |// sound flags
 		bits_SOUND_WORLD |
-		bits_SOUND_PLAYER |
+		bits_SOUND_PLAYER_IF_NOT_ALLY |
 		bits_SOUND_DANGER |
 
 		bits_SOUND_MEAT	|// scents
@@ -83,11 +116,46 @@ Schedule_t slIdleStand[] =
 	},
 };
 
+Task_t tlIdlePatrolTurning[] =
+{
+	{ TASK_STOP_MOVING, 0 },
+	{ TASK_SET_ACTIVITY, (float)ACT_IDLE },
+	{ TASK_WAIT_PATROL_TURNING, (float)0 },
+};
+
+Schedule_t slIdlePatrolTurning[] =
+{
+	{
+		tlIdlePatrolTurning,
+		ARRAYSIZE( tlIdlePatrolTurning ),
+		bits_COND_NEW_ENEMY |
+		bits_COND_SEE_FEAR |
+		bits_COND_SCHEDULE_SUGGESTED |
+		bits_COND_LIGHT_DAMAGE |
+		bits_COND_HEAVY_DAMAGE |
+		bits_COND_HEAR_SOUND |
+		bits_COND_SMELL_FOOD |
+		bits_COND_SMELL |
+		bits_COND_PROVOKED,
+
+		bits_SOUND_COMBAT |// sound flags
+		bits_SOUND_WORLD |
+		bits_SOUND_PLAYER_IF_NOT_ALLY |
+		bits_SOUND_DANGER |
+
+		bits_SOUND_MEAT	|// scents
+		bits_SOUND_CARCASS |
+		bits_SOUND_GARBAGE,
+		"IdleTurning"
+	},
+};
+
 Schedule_t slIdleTrigger[] =
 {
 	{
 		tlIdleStand1,
 		ARRAYSIZE( tlIdleStand1 ),
+		bits_COND_SCHEDULE_SUGGESTED |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE,
 		0,
@@ -107,6 +175,7 @@ Schedule_t slIdleWalk[] =
 		tlIdleWalk1,
 		ARRAYSIZE( tlIdleWalk1 ),
 		bits_COND_NEW_ENEMY |
+		bits_COND_SCHEDULE_SUGGESTED |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_HEAR_SOUND |
@@ -115,11 +184,42 @@ Schedule_t slIdleWalk[] =
 		bits_COND_PROVOKED,
 
 		bits_SOUND_COMBAT |// sound flags
-
+		bits_SOUND_DANGER |
+		bits_SOUND_PLAYER_IF_NOT_ALLY |
 		bits_SOUND_MEAT |// scents
 		bits_SOUND_CARCASS |
 		bits_SOUND_GARBAGE,
 		"Idle Walk"
+	},
+};
+
+Task_t tlIdleRun[] =
+{
+	{ TASK_RUN_PATH, (float)9999 },
+	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
+};
+
+Schedule_t slIdleRun[] =
+{
+	{
+		tlIdleRun,
+		ARRAYSIZE( tlIdleRun ),
+		bits_COND_NEW_ENEMY |
+		bits_COND_SCHEDULE_SUGGESTED |
+		bits_COND_LIGHT_DAMAGE |
+		bits_COND_HEAVY_DAMAGE |
+		bits_COND_HEAR_SOUND |
+		bits_COND_SMELL_FOOD |
+		bits_COND_SMELL |
+		bits_COND_PROVOKED,
+
+		bits_SOUND_COMBAT |// sound flags
+		bits_SOUND_DANGER |
+		bits_SOUND_PLAYER_IF_NOT_ALLY |
+		bits_SOUND_MEAT |// scents
+		bits_SOUND_CARCASS |
+		bits_SOUND_GARBAGE,
+		"Idle Run"
 	},
 };
 
@@ -140,6 +240,7 @@ Schedule_t slAmbush[] =
 		tlAmbush,
 		ARRAYSIZE( tlAmbush ),
 		bits_COND_NEW_ENEMY |
+		bits_COND_SCHEDULE_SUGGESTED |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_PROVOKED,
@@ -178,13 +279,14 @@ Schedule_t slActiveIdle[] =
 		tlActiveIdle,
 		ARRAYSIZE( tlActiveIdle ),
 		bits_COND_NEW_ENEMY |
+		bits_COND_SCHEDULE_SUGGESTED |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_PROVOKED |
 		bits_COND_HEAR_SOUND,
 		bits_SOUND_COMBAT |
 		bits_SOUND_WORLD |
-		bits_SOUND_PLAYER |
+		bits_SOUND_PLAYER_IF_NOT_ALLY |
 		bits_SOUND_DANGER,
 		"Active Idle"
 	}
@@ -198,7 +300,7 @@ Task_t tlWakeAngry1[] =
 	{ TASK_STOP_MOVING, 0 },
 	{ TASK_SET_ACTIVITY, (float)ACT_IDLE },
 	{ TASK_SOUND_WAKE, (float)0 },
-	{ TASK_FACE_IDEAL, (float)0 },
+	{ TASK_FACE_ENEMY, (float)0 },
 };
 
 Schedule_t slWakeAngry[] =
@@ -229,6 +331,7 @@ Schedule_t slAlertFace[] =
 		ARRAYSIZE( tlAlertFace1 ),
 		bits_COND_NEW_ENEMY |
 		bits_COND_SEE_FEAR |
+		bits_COND_SCHEDULE_SUGGESTED |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_PROVOKED,
@@ -279,6 +382,7 @@ Schedule_t slAlertStand[] =
 		bits_COND_NEW_ENEMY |
 		bits_COND_SEE_ENEMY |
 		bits_COND_SEE_FEAR |
+		bits_COND_SCHEDULE_SUGGESTED |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_PROVOKED |
@@ -287,7 +391,7 @@ Schedule_t slAlertStand[] =
 		bits_COND_HEAR_SOUND,
 		bits_SOUND_COMBAT |// sound flags
 		bits_SOUND_WORLD |
-		bits_SOUND_PLAYER |
+		bits_SOUND_PLAYER_IF_NOT_ALLY |
 		bits_SOUND_DANGER |
 		bits_SOUND_MEAT |// scent flags
 		bits_SOUND_CARCASS |
@@ -323,11 +427,70 @@ Schedule_t slInvestigateSound[] =
 		ARRAYSIZE( tlInvestigateSound ),
 		bits_COND_NEW_ENEMY |
 		bits_COND_SEE_FEAR |
+		bits_COND_SCHEDULE_SUGGESTED |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_HEAR_SOUND,
 		bits_SOUND_DANGER,
 		"InvestigateSound"
+	},
+};
+
+Task_t tlInvestigateSpot[] =
+{
+	{ TASK_STOP_MOVING, (float)0 },
+	{ TASK_STORE_LASTPOSITION, (float)0 },
+	{ TASK_GET_PATH_TO_SPOT, (float)0 },
+	{ TASK_FACE_IDEAL, (float)0 },
+	{ TASK_WALK_OR_RUN_PATH, (float)0 },
+	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
+	{ TASK_PLAY_SEQUENCE, (float)ACT_IDLE },
+	{ TASK_WAIT, (float)10 },
+	{ TASK_GET_PATH_TO_LASTPOSITION,(float)0 },
+	{ TASK_WALK_OR_RUN_PATH, (float)0 },
+	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
+	{ TASK_CLEAR_LASTPOSITION, (float)0 },
+};
+
+Schedule_t slInvestigateSpot[] =
+{
+	{
+		tlInvestigateSpot,
+		ARRAYSIZE( tlInvestigateSpot ),
+		bits_COND_NEW_ENEMY |
+		bits_COND_SEE_FEAR |
+		bits_COND_SCHEDULE_SUGGESTED |
+		bits_COND_LIGHT_DAMAGE |
+		bits_COND_HEAVY_DAMAGE |
+		bits_COND_HEAR_SOUND,
+		bits_SOUND_DANGER,
+		"InvestigateSpot"
+	},
+};
+
+Task_t tlMoveToSpot[] =
+{
+	{ TASK_STOP_MOVING, (float)0 },
+	{ TASK_GET_PATH_TO_SPOT, (float)0 },
+	{ TASK_FACE_IDEAL, (float)0 },
+	{ TASK_WALK_OR_RUN_PATH, (float)0 },
+	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
+	{ TASK_SET_ACTIVITY, (float)ACT_IDLE },
+};
+
+Schedule_t slMoveToSpot[] =
+{
+	{
+		tlMoveToSpot,
+		ARRAYSIZE( tlMoveToSpot ),
+		bits_COND_NEW_ENEMY |
+		bits_COND_SEE_FEAR |
+		bits_COND_SCHEDULE_SUGGESTED |
+		bits_COND_LIGHT_DAMAGE |
+		bits_COND_HEAVY_DAMAGE |
+		bits_COND_HEAR_SOUND,
+		bits_SOUND_DANGER,
+		"MoveToSpot"
 	},
 };
 
@@ -348,6 +511,7 @@ Schedule_t slCombatStand[] =
 		ARRAYSIZE( tlCombatStand1 ),
 		bits_COND_NEW_ENEMY |
 		bits_COND_ENEMY_DEAD |
+		bits_COND_ENEMY_LOST |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_CAN_ATTACK, 
@@ -373,7 +537,8 @@ Schedule_t slCombatFace[] =
 		ARRAYSIZE( tlCombatFace1 ),
 		bits_COND_CAN_ATTACK |
 		bits_COND_NEW_ENEMY |
-		bits_COND_ENEMY_DEAD,
+		bits_COND_ENEMY_DEAD |
+		bits_COND_ENEMY_LOST,
 		0,
 		"Combat Face"
 	},
@@ -399,6 +564,7 @@ Schedule_t slStandoff[] =
 		bits_COND_CAN_RANGE_ATTACK1 |
 		bits_COND_CAN_RANGE_ATTACK2 |
 		bits_COND_ENEMY_DEAD |
+		bits_COND_ENEMY_LOST |
 		bits_COND_NEW_ENEMY |
 		bits_COND_HEAR_SOUND,
 		bits_SOUND_DANGER,
@@ -465,6 +631,7 @@ Schedule_t slRangeAttack1[] =
 		ARRAYSIZE( tlRangeAttack1 ),
 		bits_COND_NEW_ENEMY |
 		bits_COND_ENEMY_DEAD |
+		bits_COND_ENEMY_LOST |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_ENEMY_OCCLUDED |
@@ -490,6 +657,7 @@ Schedule_t slRangeAttack2[] =
 		ARRAYSIZE( tlRangeAttack2 ),
 		bits_COND_NEW_ENEMY |
 		bits_COND_ENEMY_DEAD |
+		bits_COND_ENEMY_LOST |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_ENEMY_OCCLUDED |
@@ -514,6 +682,7 @@ Schedule_t slPrimaryMeleeAttack[] =
 		ARRAYSIZE( tlPrimaryMeleeAttack1 ),
 		bits_COND_NEW_ENEMY |
 		bits_COND_ENEMY_DEAD |
+		bits_COND_ENEMY_LOST |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_ENEMY_OCCLUDED,
@@ -537,6 +706,7 @@ Schedule_t slSecondaryMeleeAttack[] =
 		ARRAYSIZE( tlSecondaryMeleeAttack1 ), 
 		bits_COND_NEW_ENEMY |
 		bits_COND_ENEMY_DEAD |
+		bits_COND_ENEMY_LOST |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_ENEMY_OCCLUDED,
@@ -560,6 +730,7 @@ Schedule_t slSpecialAttack1[] =
 		ARRAYSIZE( tlSpecialAttack1 ),
 		bits_COND_NEW_ENEMY |
 		bits_COND_ENEMY_DEAD |
+		bits_COND_ENEMY_LOST |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_ENEMY_OCCLUDED |
@@ -585,6 +756,7 @@ Schedule_t slSpecialAttack2[] =
 		ARRAYSIZE( tlSpecialAttack2 ),
 		bits_COND_NEW_ENEMY |
 		bits_COND_ENEMY_DEAD |
+		bits_COND_ENEMY_LOST |
 		bits_COND_LIGHT_DAMAGE |
 		bits_COND_HEAVY_DAMAGE |
 		bits_COND_ENEMY_OCCLUDED |
@@ -626,14 +798,14 @@ Schedule_t slChaseEnemy[] =
 Task_t tlChaseEnemyFailed[] =
 {
 	{ TASK_STOP_MOVING, (float)0 },
-	{ TASK_WAIT, (float)0.2 },
-	{ TASK_FIND_COVER_FROM_ENEMY, (float)0 },
+	{ TASK_WAIT, (float)0.1 },
+	{ TASK_FIND_SPOT_AWAY_FROM_ENEMY, (float)0 },
 	{ TASK_RUN_PATH, (float)0 },
 	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
 	{ TASK_REMEMBER, (float)bits_MEMORY_INCOVER },
 	//{ TASK_TURN_LEFT, (float)179 },
 	{ TASK_FACE_ENEMY, (float)0 },
-	{ TASK_WAIT, (float)1 },
+	{ TASK_WAIT, (float)0.5 },
 };
 
 Schedule_t slChaseEnemyFailed[] =
@@ -648,7 +820,7 @@ Schedule_t slChaseEnemyFailed[] =
 		bits_COND_CAN_MELEE_ATTACK2 |
 		bits_COND_HEAR_SOUND,
 		bits_SOUND_DANGER,
-		"tlChaseEnemyFailed"
+		"Chase Enemy Failed"
 	},
 };
 
@@ -783,7 +955,8 @@ Schedule_t slError[] =
 
 Task_t tlScriptedWalk[] =
 {
-	{ TASK_WALK_TO_TARGET, (float)TARGET_MOVE_SCRIPTED },
+	{ TASK_SET_FAIL_SCHEDULE, (float)SCHED_AISCRIPT_MOVE_FAILED },
+	{ TASK_WALK_TO_SCRIPT, (float)TARGET_MOVE_SCRIPTED },
 	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
 	{ TASK_PLANT_ON_SCRIPT, (float)0 },
 	{ TASK_FACE_SCRIPT, (float)0 },
@@ -804,9 +977,32 @@ Schedule_t slWalkToScript[] =
 	},
 };
 
+Task_t tlScriptedWalkToRadius[] =
+{
+	{ TASK_SET_FAIL_SCHEDULE, (float)SCHED_AISCRIPT_MOVE_FAILED },
+	{ TASK_WALK_TO_SCRIPT_RADIUS, (float)0 },
+	{ TASK_FACE_SCRIPT, (float)0 },
+	{ TASK_FACE_IDEAL, (float)0 },
+	{ TASK_ENABLE_SCRIPT, (float)0 },
+	{ TASK_WAIT_FOR_SCRIPT, (float)0 },
+	{ TASK_PLAY_SCRIPT, (float)0 },
+};
+
+Schedule_t slWalkToScriptRadius[] =
+{
+	{
+		tlScriptedWalkToRadius,
+		ARRAYSIZE( tlScriptedWalkToRadius ),
+		SCRIPT_BREAK_CONDITIONS,
+		0,
+		"WalkToScriptRadius"
+	},
+};
+
 Task_t tlScriptedRun[] =
 {
-	{ TASK_RUN_TO_TARGET, (float)TARGET_MOVE_SCRIPTED },
+	{ TASK_SET_FAIL_SCHEDULE, (float)SCHED_AISCRIPT_MOVE_FAILED },
+	{ TASK_RUN_TO_SCRIPT, (float)TARGET_MOVE_SCRIPTED },
 	{ TASK_WAIT_FOR_MOVEMENT,(float)0 },
 	{ TASK_PLANT_ON_SCRIPT, (float)0 },
 	{ TASK_FACE_SCRIPT, (float)0 },
@@ -824,6 +1020,28 @@ Schedule_t slRunToScript[] =
 		SCRIPT_BREAK_CONDITIONS,
 		0,
 		"RunToScript"
+	},
+};
+
+Task_t tlScriptedRunToRadius[] =
+{
+	{ TASK_SET_FAIL_SCHEDULE, (float)SCHED_AISCRIPT_MOVE_FAILED },
+	{ TASK_RUN_TO_SCRIPT_RADIUS, (float)0 },
+	{ TASK_FACE_SCRIPT, (float)0 },
+	{ TASK_FACE_IDEAL, (float)0 },
+	{ TASK_ENABLE_SCRIPT, (float)0 },
+	{ TASK_WAIT_FOR_SCRIPT, (float)0 },
+	{ TASK_PLAY_SCRIPT, (float)0 },
+};
+
+Schedule_t slRunToScriptRadius[] =
+{
+	{
+		tlScriptedRunToRadius,
+		ARRAYSIZE( tlScriptedRunToRadius ),
+		SCRIPT_BREAK_CONDITIONS,
+		0,
+		"RunToScriptRadius"
 	},
 };
 
@@ -862,6 +1080,47 @@ Schedule_t slFaceScript[] =
 		SCRIPT_BREAK_CONDITIONS,
 		0,
 		"FaceScript"
+	},
+};
+
+//LRC
+Task_t tlScriptedTeleport[] =
+{
+	{ TASK_PLANT_ON_SCRIPT,		(float)0		},
+	{ TASK_WAIT_FOR_SCRIPT,		(float)0		},
+	{ TASK_PLAY_SCRIPT,			(float)0		},
+	//{ TASK_END_SCRIPT,			(float)0		},
+};
+
+//LRC
+Schedule_t slTeleportToScript[] =
+{
+	{
+		tlScriptedTeleport,
+		ARRAYSIZE ( tlScriptedTeleport ),
+		SCRIPT_BREAK_CONDITIONS,
+		0,
+		"TeleportToScript"
+	},
+};
+
+Task_t tlScriptedForcedTeleport[] =
+{
+	{ TASK_FORCED_PLANT_ON_SCRIPT,		(float)0		},
+	{ TASK_ENABLE_SCRIPT, (float)0 },
+	{ TASK_WAIT_FOR_SCRIPT,		(float)0		},
+	{ TASK_PLAY_SCRIPT,			(float)0		},
+	//{ TASK_END_SCRIPT,			(float)0		},
+};
+
+Schedule_t slForcedTeleportToScript[] =
+{
+	{
+		tlScriptedForcedTeleport,
+		ARRAYSIZE ( tlScriptedForcedTeleport ),
+		SCRIPT_BREAK_CONDITIONS,
+		0,
+		"Forced Teleport To Script"
 	},
 };
 
@@ -910,6 +1169,27 @@ Schedule_t slTakeCoverFromOrigin[] =
 	},
 };
 
+Task_t tlTakeCoverFromSpot[] =
+{
+	{ TASK_STOP_MOVING, (float)0 },
+	{ TASK_FIND_COVER_FROM_SPOT, (float)0 },
+	{ TASK_RUN_OR_WALK_PATH, (float)0 },
+	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
+	{ TASK_REMEMBER, (float)bits_MEMORY_INCOVER },
+	{ TASK_TURN_LEFT, (float)179 },
+};
+
+Schedule_t slTakeCoverFromSpot[] =
+{
+	{
+		tlTakeCoverFromSpot,
+		ARRAYSIZE( tlTakeCoverFromSpot ),
+		bits_COND_NEW_ENEMY,
+		0,
+		"TakeCoverFromSpot"
+	},
+};
+
 //=========================================================
 // hide from the loudest sound source
 //=========================================================
@@ -941,14 +1221,14 @@ Schedule_t slTakeCoverFromBestSound[] =
 Task_t tlTakeCoverFromEnemy[] =
 {
 	{ TASK_STOP_MOVING, (float)0 },
-	{ TASK_WAIT, (float)0.2 },
+	{ TASK_WAIT, (float)0.1 },
 	{ TASK_FIND_COVER_FROM_ENEMY, (float)0 },
 	{ TASK_RUN_PATH, (float)0 },
 	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
 	{ TASK_REMEMBER, (float)bits_MEMORY_INCOVER },
 	//{ TASK_TURN_LEFT, (float)179 },
 	{ TASK_FACE_ENEMY, (float)0 },
-	{ TASK_WAIT, (float)1 },
+	{ TASK_WAIT, (float)0.5 },
 };
 
 Schedule_t slTakeCoverFromEnemy[] =
@@ -958,15 +1238,156 @@ Schedule_t slTakeCoverFromEnemy[] =
 		ARRAYSIZE( tlTakeCoverFromEnemy ),
 		bits_COND_NEW_ENEMY,
 		0,
-		"tlTakeCoverFromEnemy"
+		"Take Cover From Enemy"
+	},
+};
+Task_t tlRetreaFromEnemy[] =
+{
+	{ TASK_SET_FAIL_SCHEDULE, (float)SCHED_RETREAT_FROM_ENEMY_FAILED },
+	{ TASK_STOP_MOVING, (float)0 },
+	{ TASK_WAIT, (float)0.1 },
+	{ TASK_FIND_SPOT_AWAY_FROM_ENEMY, (float)0 },
+	{ TASK_RUN_PATH, (float)0 },
+	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
+	{ TASK_FACE_ENEMY, (float)0 },
+	{ TASK_WAIT, (float)0.5 },
+};
+
+Schedule_t slRetreatFromEnemy[] =
+{
+	{
+		tlRetreaFromEnemy,
+		ARRAYSIZE( tlRetreaFromEnemy ),
+		bits_COND_NEW_ENEMY,
+		0,
+		"Retreat From Enemy"
+	},
+};
+
+Task_t tlRetreatFromSpot[] =
+{
+	{ TASK_SET_FAIL_SCHEDULE, (float)SCHED_RETREAT_FROM_SPOT_FAILED },
+	{ TASK_STOP_MOVING, (float)0 },
+	{ TASK_WAIT, (float)0.1 },
+	{ TASK_FIND_SPOT_AWAY, (float)0 },
+	{ TASK_WALK_OR_RUN_PATH, (float)0 },
+	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
+};
+
+Schedule_t slRetreatFromSpot[] =
+{
+	{
+		tlRetreatFromSpot,
+		ARRAYSIZE( tlRetreatFromSpot ),
+		bits_COND_NEW_ENEMY |
+		bits_COND_SCHEDULE_SUGGESTED |
+		bits_COND_LIGHT_DAMAGE |
+		bits_COND_HEAVY_DAMAGE |
+		bits_COND_HEAR_SOUND,
+		bits_SOUND_DANGER,
+		"Move Away From Spot"
+	},
+};
+
+Task_t tlFreeroam[] =
+{
+	{ TASK_STOP_MOVING, (float)0 },
+	{ TASK_WAIT_RANDOM, 0.5f },
+	{ TASK_GET_PATH_TO_FREEROAM_NODE, (float)0 },
+	{ TASK_WALK_PATH, (float)0 },
+	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
+	{ TASK_SET_ACTIVITY, (float)ACT_IDLE },
+	{ TASK_WAIT, 0.5f },
+	{ TASK_WAIT_RANDOM, 0.5f },
+	{ TASK_WAIT_PVS, (float)0 },
+};
+
+Schedule_t slFreeroam[] =
+{
+	{
+		tlFreeroam,
+		ARRAYSIZE( tlFreeroam ),
+		bits_COND_NEW_ENEMY |
+		bits_COND_SCHEDULE_SUGGESTED |
+		bits_COND_LIGHT_DAMAGE |
+		bits_COND_HEAVY_DAMAGE |
+		bits_COND_HEAR_SOUND,
+		bits_SOUND_DANGER |
+		bits_SOUND_PLAYER_IF_NOT_ALLY,
+		"Free Roaming"
+	},
+};
+
+Schedule_t slFreeroamAlert[] =
+{
+	{
+		tlFreeroam,
+		ARRAYSIZE( tlFreeroam ),
+		bits_COND_NEW_ENEMY |
+		bits_COND_SCHEDULE_SUGGESTED |
+		bits_COND_LIGHT_DAMAGE |
+		bits_COND_HEAVY_DAMAGE |
+		bits_COND_HEAR_SOUND,
+		bits_SOUND_DANGER | bits_SOUND_COMBAT |
+		bits_SOUND_PLAYER_IF_NOT_ALLY,
+		"Free Roaming (alert)"
+	},
+};
+
+Task_t tlMoveToEnemyLKP[] =
+{
+	{ TASK_GET_PATH_TO_ENEMY_LKP, (float)0 },
+	{ TASK_RUN_PATH, (float)0 },
+	{ TASK_WAIT_FOR_MOVEMENT, (float)0 },
+};
+
+Schedule_t slMoveToEnemyLKP[] =
+{
+	{
+		tlMoveToEnemyLKP,
+		ARRAYSIZE( tlMoveToEnemyLKP ),
+		bits_COND_NEW_ENEMY |
+		bits_COND_SCHEDULE_SUGGESTED |
+		bits_COND_LIGHT_DAMAGE |
+		bits_COND_HEAVY_DAMAGE |
+		bits_COND_CAN_ATTACK |
+		bits_COND_HEAR_SOUND,
+		bits_SOUND_DANGER,
+		"Move to Enemy LKP"
+	},
+};
+
+Task_t tlIdleFace[] =
+{
+	{ TASK_STOP_MOVING, 0 },
+	{ TASK_SET_ACTIVITY, (float)ACT_IDLE },
+	{ TASK_FACE_SCHEDULED, (float)0 },
+};
+
+Schedule_t slIdleFace[] =
+{
+	{
+		tlIdleFace,
+		ARRAYSIZE( tlIdleFace ),
+		bits_COND_NEW_ENEMY |
+		bits_COND_SEE_FEAR |
+		bits_COND_SCHEDULE_SUGGESTED |
+		bits_COND_LIGHT_DAMAGE |
+		bits_COND_HEAVY_DAMAGE |
+		bits_COND_HEAR_SOUND |
+		bits_COND_PROVOKED,
+		bits_SOUND_DANGER,
+		"Idle Face"
 	},
 };
 
 Schedule_t *CBaseMonster::m_scheduleList[] =
 {
 	slIdleStand,
+	slIdlePatrolTurning,
 	slIdleTrigger,
 	slIdleWalk,
+	slIdleRun,
 	slAmbush,
 	slActiveIdle,
 	slWakeAngry,
@@ -974,6 +1395,8 @@ Schedule_t *CBaseMonster::m_scheduleList[] =
 	slAlertSmallFlinch,
 	slAlertStand,
 	slInvestigateSound,
+	slInvestigateSpot,
+	slMoveToSpot,
 	slCombatStand,
 	slCombatFace,
 	slStandoff,
@@ -997,11 +1420,21 @@ Schedule_t *CBaseMonster::m_scheduleList[] =
 	slRunToScript,
 	slWaitScript,
 	slFaceScript,
+	slTeleportToScript,
+	slForcedTeleportToScript,
 	slCower,
 	slTakeCoverFromOrigin,
+	slTakeCoverFromSpot,
 	slTakeCoverFromBestSound,
 	slTakeCoverFromEnemy,
-	slFail
+	slFreeroam,
+	slFreeroamAlert,
+	slMoveToEnemyLKP,
+	slRetreatFromEnemy,
+	slRetreatFromSpot,
+	slIdleFace,
+	slFail,
+	slCombatFail
 };
 
 Schedule_t *CBaseMonster::ScheduleFromName( const char *pName )
@@ -1023,7 +1456,7 @@ Schedule_t *CBaseMonster::ScheduleInList( const char *pName, Schedule_t **pList,
 	{
 		if( !pList[i]->pName )
 		{
-			ALERT( at_console, "Unnamed schedule!\n" );
+			ALERT( at_console, "Unnamed schedule in %s!\n", STRING( pev->classname ) );
 			continue;
 		}
 		if( stricmp( pName, pList[i]->pName ) == 0 )
@@ -1056,17 +1489,36 @@ Schedule_t* CBaseMonster::GetScheduleOfType( int Type )
 
 			switch( m_pCine->m_fMoveTo )
 			{
-				case 0:
-				case 4:
+				case SCRIPT_MOVE_NO:
+				case SCRIPT_MOVE_INSTANT:
 					return slWaitScript;
-				case 1:
+				case SCRIPT_MOVE_WALK:
+				{
+					if (m_pCine->MoveFailAttemptsExceeded())
+						return slForcedTeleportToScript;
+					if (m_pCine->m_flMoveToRadius >= 1.0f)
+						return slWalkToScriptRadius;
 					return slWalkToScript;
-				case 2:
+				}
+				case SCRIPT_MOVE_RUN:
+				{
+					if (m_pCine->MoveFailAttemptsExceeded())
+						return slForcedTeleportToScript;
+					if (m_pCine->m_flMoveToRadius >= 1.0f)
+						return slRunToScriptRadius;
 					return slRunToScript;
-				case 5:
+				}
+				case SCRIPT_MOVE_FACE:
 					return slFaceScript;
+				case SCRIPT_MOVE_TELEPORT:
+					return slTeleportToScript;
 			}
 			break;
+		}
+	case SCHED_AISCRIPT_MOVE_FAILED:
+		{
+			MakeMyBlockerMoveAway();
+			return slScriptMoveFail;
 		}
 	case SCHED_IDLE_STAND:
 		{
@@ -1077,9 +1529,17 @@ Schedule_t* CBaseMonster::GetScheduleOfType( int Type )
 
 			return &slIdleStand[0];
 		}
+	case SCHED_IDLE_PATROL_TURNING:
+		{
+			return slIdlePatrolTurning;
+		}
 	case SCHED_IDLE_WALK:
 		{
 			return &slIdleWalk[0];
+		}
+	case SCHED_IDLE_RUN:
+		{
+			return &slIdleRun[0];
 		}
 	case SCHED_WAIT_TRIGGER:
 		{
@@ -1111,7 +1571,7 @@ Schedule_t* CBaseMonster::GetScheduleOfType( int Type )
 		}
 	case SCHED_CHASE_ENEMY_FAILED:
 		{
-			return &slFail[0];
+			return GetScheduleOfType(SCHED_FAIL);
 		}
 	case SCHED_SMALL_FLINCH:
 		{
@@ -1185,6 +1645,14 @@ Schedule_t* CBaseMonster::GetScheduleOfType( int Type )
 		{
 			return &slInvestigateSound[0];
 		}
+	case SCHED_INVESTIGATE_SPOT:
+		{
+			return &slInvestigateSpot[0];
+		}
+	case SCHED_MOVE_TO_SPOT:
+		{
+			return &slMoveToSpot[0];
+		}
 	case SCHED_DIE:
 		{
 			return &slDie[0];
@@ -1193,13 +1661,52 @@ Schedule_t* CBaseMonster::GetScheduleOfType( int Type )
 		{
 			return &slTakeCoverFromOrigin[0];
 		}
+	case SCHED_TAKE_COVER_FROM_SPOT:
+		{
+			return &slTakeCoverFromSpot[0];
+		}
 	case SCHED_VICTORY_DANCE:
 		{
 			return &slVictoryDance[0];
 		}
 	case SCHED_FAIL:
 		{
+			if (npc_combat_fail_schedule.value != 0 && m_MonsterState == MONSTERSTATE_COMBAT && m_hEnemy != 0)
+				return slCombatFail;
 			return slFail;
+		}
+	case SCHED_FREEROAM:
+		{
+			return slFreeroam;
+		}
+	case SCHED_FREEROAM_ALERT:
+		{
+			return slFreeroamAlert;
+		}
+	case SCHED_MOVE_TO_ENEMY_LKP:
+		{
+			return slMoveToEnemyLKP;
+		}
+	case SCHED_RETREAT_FROM_ENEMY:
+		{
+			return slRetreatFromEnemy;
+		}
+	case SCHED_RETREAT_FROM_ENEMY_FAILED:
+		{
+			return GetScheduleOfType(SCHED_FAIL);
+		}
+	case SCHED_RETREAT_FROM_SPOT:
+		{
+			return slRetreatFromSpot;
+		}
+	case SCHED_RETREAT_FROM_SPOT_FAILED:
+		{
+			MakeMyBlockerMoveAway();
+			return GetScheduleOfType(SCHED_FAIL);
+		}
+	case SCHED_IDLE_FACE:
+		{
+			return slIdleFace;
 		}
 	default:
 		{

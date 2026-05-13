@@ -8,9 +8,11 @@
 // studio_model.cpp
 // routines for setting up to draw 3DStudio models
 
-#include "hud.h"
+#include "windows_lean.h"
+#include "gl_dynamic.h"
+
+#include <cstdlib>
 #include "cl_util.h"
-#include "const.h"
 #include "com_model.h"
 #include "studio.h"
 #include "entity_state.h"
@@ -18,14 +20,22 @@
 #include "dlight.h"
 #include "triangleapi.h"
 
-#include <stdio.h>
-#include <string.h>
-
 #include "studio_util.h"
 #include "r_studioint.h"
 
 #include "StudioModelRenderer.h"
 #include "GameStudioModelRenderer.h"
+
+#include <vector>
+
+#if OPENGL_AVAILABLE
+#define GL_CLAMP_TO_EDGE 0x812F
+
+static GLuint g_iBlankTex = 0;
+#endif
+
+extern cvar_t *cl_righthand;
+extern bool ShouldMirrorCurrentViewModel();
 
 // Global engine <-> studio model rendering code interface
 engine_studio_api_t IEngineStudio;
@@ -53,8 +63,10 @@ Init
 
 ====================
 */
-void CStudioModelRenderer::Init( void )
+void CStudioModelRenderer::Init()
 {
+	StudioCacheFullbrightNames();
+
 	// Set up some variables shared with engine
 	m_pCvarHiModels			= IEngineStudio.GetCvar( "cl_himodels" );
 	m_pCvarDeveloper		= IEngineStudio.GetCvar( "developer" );
@@ -77,7 +89,7 @@ CStudioModelRenderer
 
 ====================
 */
-CStudioModelRenderer::CStudioModelRenderer( void )
+CStudioModelRenderer::CStudioModelRenderer()
 {
 	m_fDoInterp		= 1;
 	m_fGaitEstimation	= 1;
@@ -105,7 +117,7 @@ CStudioModelRenderer::CStudioModelRenderer( void )
 
 ====================
 */
-CStudioModelRenderer::~CStudioModelRenderer( void )
+CStudioModelRenderer::~CStudioModelRenderer()
 {
 }
 
@@ -186,7 +198,7 @@ void CStudioModelRenderer::StudioCalcBoneQuaterion( int frame, float s, mstudiob
 {
 	int j, k;
 	vec4_t q1, q2;
-	vec3_t angle1, angle2;
+	Vector angle1, angle2;
 	mstudioanimvalue_t *panimvalue;
 
 	for( j = 0; j < 3; j++ )
@@ -407,7 +419,6 @@ mstudioanim_t *CStudioModelRenderer::StudioGetAnim( model_t *m_pSubModel, mstudi
 		gEngfuncs.Con_DPrintf("loading %s\n", pseqgroup->name );
 		IEngineStudio.LoadCacheFile( pseqgroup->name, (struct cache_user_s *)&paSequences[pseqdesc->seqgroup] );
 	}
-
 	return (mstudioanim_t *)( (byte *)paSequences[pseqdesc->seqgroup].data + pseqdesc->animindex );
 }
 
@@ -450,8 +461,8 @@ StudioSetUpTransform
 void CStudioModelRenderer::StudioSetUpTransform( int trivial_accept )
 {
 	int i;
-	vec3_t angles;
-	vec3_t modelpos;
+	Vector angles;
+	Vector modelpos;
 
 	// tweek model origin
 	//for( i = 0; i < 3; i++ )
@@ -472,6 +483,7 @@ void CStudioModelRenderer::StudioSetUpTransform( int trivial_accept )
 	{
 		float f = 0;
 		float d;
+		mstudioseqdesc_t *pseqdesc = (mstudioseqdesc_t *)((byte *)m_pStudioHeader + m_pStudioHeader->seqindex) + m_pCurrentEntity->curstate.sequence;//acess to studio flags
 
 		// don't do it if the goalstarttime hasn't updated in a while.
 
@@ -494,11 +506,13 @@ void CStudioModelRenderer::StudioSetUpTransform( int trivial_accept )
 		{
 			f = 0.0f;
 		}
-
-		for( i = 0; i < 3; i++ )
-		{
-			modelpos[i] += ( m_pCurrentEntity->origin[i] - m_pCurrentEntity->latched.prevorigin[i] ) * f;
-		}
+#if 1
+		if (pseqdesc->motiontype & STUDIO_LX || m_pCurrentEntity->curstate.eflags & EFLAG_SLERP)
+#endif
+			for( i = 0; i < 3; i++ )
+			{
+				modelpos[i] += ( m_pCurrentEntity->origin[i] - m_pCurrentEntity->latched.prevorigin[i] ) * f;
+			}
 
 		// NOTE:  Because multiplayer lag can be relatively large, we don't want to cap
 		//  f at 1.5 anymore.
@@ -570,6 +584,18 @@ void CStudioModelRenderer::StudioSetUpTransform( int trivial_accept )
 	(*m_protationmatrix)[0][3] = modelpos[0];
 	(*m_protationmatrix)[1][3] = modelpos[1];
 	(*m_protationmatrix)[2][3] = modelpos[2];
+
+	if (m_pCurrentEntity->curstate.scale != 0)
+	{
+		int j;
+		for (i = 0; i < 3; i++)
+		{
+			for (j = 0; j < 3; j++)
+			{
+				(*m_protationmatrix)[i][j] *= m_pCurrentEntity->curstate.scale;
+			}
+		}
+	}
 }
 
 /*
@@ -578,7 +604,7 @@ StudioEstimateInterpolant
 
 ====================
 */
-float CStudioModelRenderer::StudioEstimateInterpolant( void )
+float CStudioModelRenderer::StudioEstimateInterpolant()
 {
 	float dadt = 1.0f;
 
@@ -787,7 +813,7 @@ StudioSetupBones
 
 ====================
 */
-void CStudioModelRenderer::StudioSetupBones( void )
+void CStudioModelRenderer::StudioSetupBones()
 {
 	int i, j;
 	double f;
@@ -931,7 +957,6 @@ void CStudioModelRenderer::StudioSetupBones( void )
 		}
 	}
 
-
 	for( i = 0; i < m_pStudioHeader->numbones; i++ )
 	{
 		QuaternionMatrix( q[i], bonematrix );
@@ -944,6 +969,14 @@ void CStudioModelRenderer::StudioSetupBones( void )
 		{
 			if( IEngineStudio.IsHardware() )
 			{
+				if (cl_righthand->value > 0.0f && gEngfuncs.GetViewModel() == m_pCurrentEntity)
+				{
+					bonematrix[1][0] = -bonematrix[1][0];
+					bonematrix[1][1] = -bonematrix[1][1];
+					bonematrix[1][2] = -bonematrix[1][2];
+					bonematrix[1][3] = -bonematrix[1][3];
+				}
+
 				ConcatTransforms( (*m_protationmatrix), bonematrix, (*m_pbonetransform)[i] );
 
 				// MatrixCopy should be faster...
@@ -973,7 +1006,7 @@ StudioSaveBones
 
 ====================
 */
-void CStudioModelRenderer::StudioSaveBones( void )
+void CStudioModelRenderer::StudioSaveBones()
 {
 	int i;
 
@@ -1000,7 +1033,6 @@ void CStudioModelRenderer::StudioMergeBones( model_t *m_pSubModel )
 {
 	int i, j;
 	double f;
-	int do_hunt = true;
 
 	mstudiobone_t *pbones;
 	mstudioseqdesc_t *pseqdesc;
@@ -1085,9 +1117,19 @@ StudioDrawModel
 int CStudioModelRenderer::StudioDrawModel( int flags )
 {
 	alight_t lighting;
-	vec3_t dir;
+	Vector dir;
 
 	m_pCurrentEntity = IEngineStudio.GetCurrentEntity();
+
+	bool bChangedRightHand = false;
+	int iRightHandValue;
+	if (m_pCurrentEntity == gEngfuncs.GetViewModel() && (flags & (STUDIO_RENDER|STUDIO_EVENTS)) && ShouldMirrorCurrentViewModel())
+	{
+		bChangedRightHand = true;
+		iRightHandValue = cl_righthand->value;
+		cl_righthand->value = !cl_righthand->value;
+	}
+
 	IEngineStudio.GetTimes( &m_nFrameCount, &m_clTime, &m_clOldTime );
 	IEngineStudio.GetViewInfo( m_vRenderOrigin, m_vUp, m_vRight, m_vNormal );
 	IEngineStudio.GetAliasScale( &m_fSoftwareXScale, &m_fSoftwareYScale );
@@ -1163,27 +1205,46 @@ int CStudioModelRenderer::StudioDrawModel( int flags )
 		{
 			cl_entity_t *ent = gEngfuncs.GetEntityByIndex( m_pCurrentEntity->index );
 
-			memcpy( ent->attachment, m_pCurrentEntity->attachment, sizeof(vec3_t) * 4 );
+			memcpy( ent->attachment, m_pCurrentEntity->attachment, sizeof(Vector) * 4 );
 		}
 	}
 
 	if( flags & STUDIO_RENDER )
 	{
-		lighting.plightvec = dir;
-		IEngineStudio.StudioDynamicLight( m_pCurrentEntity, &lighting );
-
-		IEngineStudio.StudioEntityLight( &lighting );
-
-		// model and frame independant
-		IEngineStudio.StudioSetupLighting( &lighting );
-
 		// get remap colors
 		m_nTopColor = m_pCurrentEntity->curstate.colormap & 0xFF;
 		m_nBottomColor = ( m_pCurrentEntity->curstate.colormap & 0xFF00 ) >> 8;
 
 		IEngineStudio.StudioSetRemapColors( m_nTopColor, m_nBottomColor );
 
-		StudioRenderModel();
+		if (HasFullbrightSupportInEngine() || IEngineStudio.IsHardware() != 1 || !StudioGetFullbright(m_pRenderModel))
+		{
+			lighting.plightvec = dir;
+			IEngineStudio.StudioDynamicLight(m_pCurrentEntity, &lighting);
+
+			if (m_pCurrentEntity->curstate.effects & EF_MODEL_BRIGHT)
+			{
+				lighting.color = Vector(1.0f, 1.0f, 1.0f);
+				lighting.ambientlight = Q_max(240, lighting.ambientlight);
+			}
+
+			IEngineStudio.StudioEntityLight(&lighting);
+
+			// model and frame independant
+			IEngineStudio.StudioSetupLighting(&lighting);
+
+			StudioRenderModel();
+		}
+		else
+		{
+			StudioRenderEntity(false);
+			StudioRenderEntity(true);
+		}
+	}
+
+	if (bChangedRightHand)
+	{
+		cl_righthand->value = iRightHandValue;
 	}
 
 	return 1;
@@ -1198,7 +1259,7 @@ StudioEstimateGait
 void CStudioModelRenderer::StudioEstimateGait( entity_state_t *pplayer )
 {
 	float dt;
-	vec3_t est_velocity;
+	Vector est_velocity;
 
 	dt = ( m_clTime - m_clOldTime );
 	if( dt < 0.0f )
@@ -1367,7 +1428,7 @@ StudioDrawPlayer
 int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 {
 	alight_t lighting;
-	vec3_t dir;
+	Vector dir;
 
 	m_pCurrentEntity = IEngineStudio.GetCurrentEntity();
 	IEngineStudio.GetTimes( &m_nFrameCount, &m_clTime, &m_clOldTime );
@@ -1395,7 +1456,7 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 
 	if( pplayer->gaitsequence )
 	{
-		vec3_t orig_angles;
+		Vector orig_angles;
 		m_pPlayerInfo = IEngineStudio.PlayerInfo( m_nPlayerIndex );
 
 		VectorCopy( m_pCurrentEntity->angles, orig_angles );
@@ -1454,7 +1515,7 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 		{
 			cl_entity_t *ent = gEngfuncs.GetEntityByIndex( m_pCurrentEntity->index );
 
-			memcpy( ent->attachment, m_pCurrentEntity->attachment, sizeof(vec3_t) * 4 );
+			memcpy( ent->attachment, m_pCurrentEntity->attachment, sizeof(Vector) * 4 );
 		}
 	}
 
@@ -1528,7 +1589,7 @@ StudioCalcAttachments
 
 ====================
 */
-void CStudioModelRenderer::StudioCalcAttachments( void )
+void CStudioModelRenderer::StudioCalcAttachments()
 {
 	int i;
 	mstudioattachment_t *pattachment;
@@ -1553,7 +1614,7 @@ StudioRenderModel
 
 ====================
 */
-void CStudioModelRenderer::StudioRenderModel( void )
+void CStudioModelRenderer::StudioRenderModel()
 {
 	IEngineStudio.SetChromeOrigin();
 	IEngineStudio.SetForceFaceFlags( 0 );
@@ -1591,7 +1652,7 @@ StudioRenderFinal_Software
 
 ====================
 */
-void CStudioModelRenderer::StudioRenderFinal_Software( void )
+void CStudioModelRenderer::StudioRenderFinal_Software()
 {
 	int i;
 
@@ -1636,7 +1697,7 @@ StudioRenderFinal_Hardware
 
 ====================
 */
-void CStudioModelRenderer::StudioRenderFinal_Hardware( void )
+void CStudioModelRenderer::StudioRenderFinal_Hardware()
 {
 	int i;
 	int rendermode;
@@ -1691,7 +1752,7 @@ StudioRenderFinal
 
 ====================
 */
-void CStudioModelRenderer::StudioRenderFinal( void )
+void CStudioModelRenderer::StudioRenderFinal()
 {
 	if( IEngineStudio.IsHardware() )
 	{
@@ -1701,4 +1762,182 @@ void CStudioModelRenderer::StudioRenderFinal( void )
 	{
 		StudioRenderFinal_Software();
 	}
+}
+/*
+====================
+StudioGetFullbright
+
+returns true if model has a fullbright texture
+also caches the name if it isnt cached yet
+====================
+*/
+bool CStudioModelRenderer::StudioGetFullbright(model_s* pmodel)
+{
+#if OPENGL_AVAILABLE
+	if (!pmodel || pmodel->type != mod_studio)
+		return false;
+
+	// check if this model is already been checked
+	auto foundFullBright = m_szFullBrightModels.find(pmodel->name);
+	if (foundFullBright != m_szFullBrightModels.cend())
+	{
+		return true;
+	}
+
+	auto foundCheckedModel = m_szCheckedModels.find(pmodel->name);
+	if (foundCheckedModel != m_szCheckedModels.cend())
+	{
+		return false;
+	}
+
+	studiohdr_t* pHdr = (studiohdr_t*)IEngineStudio.Mod_Extradata(pmodel);
+	mstudiotexture_t* pTexture = (mstudiotexture_t*)((byte*)pmodel->cache.data + pHdr->textureindex);
+
+	if (strncmp((const char*)pHdr, "IDST", 4) && strncmp((const char*)pHdr, "IDSQ", 4))
+	{
+		m_szCheckedModels.insert(pmodel->name);
+		return false;
+	}
+
+	bool foundfullbright = false;
+	if (pHdr->textureindex)
+	{
+		for (int i = 0; i < pHdr->numtextures; i++)
+		{
+			if (pTexture[i].flags & STUDIO_NF_FULLBRIGHT)
+			{
+				foundfullbright = true;
+				break;
+			}
+		}
+		if (foundfullbright)
+		{
+			m_szFullBrightModels.insert(pmodel->name);
+		}
+	}
+
+	m_szCheckedModels.insert(pmodel->name);
+
+	return foundfullbright;
+#else
+	return false;
+#endif
+}
+
+/*
+====================
+StudioRenderEntity
+
+if fullbright boolean is true, it renders only the fullbright texture
+if false, it renders all non-fullbright textures
+====================
+*/
+void CStudioModelRenderer::StudioRenderEntity(bool fullbright)
+{
+#if OPENGL_AVAILABLE
+	studiohdr_t* pHdr = (studiohdr_t*)m_pStudioHeader;
+	mstudiotexture_t* pTexture = (mstudiotexture_t*)((byte*)m_pRenderModel->cache.data + pHdr->textureindex);
+
+	std::vector<mstudiotexture_t> savedtexture;
+
+	if (pHdr->textureindex > 0)
+	{
+		for (int i = 0; i < pHdr->numtextures; i++)
+		{
+			savedtexture.push_back(pTexture[i]);
+			if ((pTexture[i].flags & STUDIO_NF_FULLBRIGHT) != 0)
+			{
+				if (!fullbright)
+				{
+					pTexture[i].index = g_iBlankTex;
+					pTexture[i].flags |= STUDIO_NF_ADDITIVE;
+				}
+			}
+			else if (fullbright)
+			{
+				pTexture[i].index = g_iBlankTex;
+				pTexture[i].flags |= STUDIO_NF_ADDITIVE;
+			}
+		}
+	}
+
+	alight_t lighting;
+	Vector dir;
+	lighting.plightvec = dir;
+
+	if (fullbright)
+	{
+		lighting.ambientlight = 128;
+		lighting.shadelight = 192;
+		lighting.color = {255, 255, 255};
+		// model and frame independant
+		IEngineStudio.StudioSetupLighting(&lighting);
+
+		StudioRenderModel();
+	}
+	else
+	{
+		IEngineStudio.StudioDynamicLight(m_pCurrentEntity, &lighting);
+		IEngineStudio.StudioEntityLight(&lighting);
+		// model and frame independant
+		IEngineStudio.StudioSetupLighting(&lighting);
+
+		StudioRenderModel();
+	}
+
+	for (int i = 0; i < pHdr->numtextures; i++)
+	{
+		memcpy(&pTexture[i], &savedtexture[i], sizeof(mstudiotexture_t));
+	}
+#endif
+}
+
+#if OPENGL_AVAILABLE
+void GenBlackTex()
+{
+	if (GL_glGenTextures)
+	{
+		GLubyte pixels[3] = {0,0,0};
+
+		GL_glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		GL_glGenTextures(1, &g_iBlankTex);
+		GL_glBindTexture(GL_TEXTURE_2D, g_iBlankTex);
+
+		GL_glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+		GL_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		GL_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		GL_glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	}
+}
+#endif
+
+/*
+====================
+StudioCacheFullbrightNames
+
+====================
+*/
+void CStudioModelRenderer::StudioCacheFullbrightNames()
+{
+#if OPENGL_AVAILABLE
+	if (HasFullbrightSupportInEngine())
+		return;
+
+	if (g_iBlankTex == 0)
+		GenBlackTex();
+
+	// clear the cache
+	m_szFullBrightModels.clear();
+	m_szCheckedModels.clear();
+
+	for (int i = 0; i < 512; i++)
+	{
+		StudioGetFullbright(IEngineStudio.GetModelByIndex(i));
+	}
+#endif
+}
+
+bool CStudioModelRenderer::HasFullbrightSupportInEngine()
+{
+	return IsAnyXash() || !LibrarySideFullbrightSupportIsOn();
 }

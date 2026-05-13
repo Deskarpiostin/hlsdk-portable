@@ -7,11 +7,8 @@
 
 // Client side entity management functions
 
-#include <memory.h>
-
 #include "hud.h"
 #include "cl_util.h"
-#include "const.h"
 #include "entity_types.h"
 #include "studio_event.h" // def. of mstudioevent_t
 #include "r_efx.h"
@@ -19,23 +16,86 @@
 #include "pm_defs.h"
 #include "pmtrace.h"	
 #include "pm_shared.h"
+#include "cl_fx.h"
 
-void Game_AddObjects( void );
+#include "particleman.h"
 
-extern vec3_t v_origin;
+void Game_AddObjects();
+
+extern Vector v_origin;
 
 int g_iAlive = 1;
+int g_iLaserDot = 0;
 
 extern "C"
 {
 	int DLLEXPORT HUD_AddEntity( int type, struct cl_entity_s *ent, const char *modelname );
-	void DLLEXPORT HUD_CreateEntities( void );
+	void DLLEXPORT HUD_CreateEntities();
 	void DLLEXPORT HUD_StudioEvent( const struct mstudioevent_s *event, const struct cl_entity_s *entity );
 	void DLLEXPORT HUD_TxferLocalOverrides( struct entity_state_s *state, const struct clientdata_s *client );
 	void DLLEXPORT HUD_ProcessPlayerState( struct entity_state_s *dst, const struct entity_state_s *src );
 	void DLLEXPORT HUD_TxferPredictionData ( struct entity_state_s *ps, const struct entity_state_s *pps, struct clientdata_s *pcd, const struct clientdata_s *ppcd, struct weapon_data_s *wd, const struct weapon_data_s *pwd );
 	void DLLEXPORT HUD_TempEntUpdate( double frametime, double client_time, double cl_gravity, struct tempent_s **ppTempEntFree, struct tempent_s **ppTempEntActive, int ( *Callback_AddVisibleEntity )( struct cl_entity_s *pEntity ), void ( *Callback_TempEntPlaySound )( struct tempent_s *pTemp, float damp ) );
 	struct cl_entity_s DLLEXPORT *HUD_GetUserEntity( int index );
+}
+
+#define FLASHLIGHT_DISTANCE 2048.0f
+
+void DrawFlashlight()
+{
+	const float distance = gHUD.FlashlightDistance();
+
+	Vector forward, vecSrc, vecEnd, origin, angles;
+	Vector view_ofs;
+	pmtrace_t tr;
+	cl_entity_t* pl = gEngfuncs.GetLocalPlayer();
+	int idx = pl->index;
+
+	// Get our exact viewangles from engine
+	gEngfuncs.GetViewAngles((float*)angles);
+
+	// Get view origin offset
+	gEngfuncs.pEventAPI->EV_LocalPlayerViewheight(view_ofs);
+
+	AngleVectors(angles, forward, NULL, NULL);
+
+	VectorCopy(pl->origin, vecSrc);
+	VectorAdd(vecSrc, view_ofs, vecSrc);
+
+	VectorMA(vecSrc, distance, forward, vecEnd);
+
+	gEngfuncs.pEventAPI->EV_SetUpPlayerPrediction(0, 1);
+
+	// Store off the old count
+	gEngfuncs.pEventAPI->EV_PushPMStates();
+
+	// Now add in all of the players.
+	gEngfuncs.pEventAPI->EV_SetSolidPlayers(idx - 1);
+
+	gEngfuncs.pEventAPI->EV_SetTraceHull(2);
+	gEngfuncs.pEventAPI->EV_PlayerTrace(vecSrc, vecEnd, PM_STUDIO_BOX | PM_GLASS_IGNORE, -1, &tr);
+
+	gEngfuncs.pEventAPI->EV_PopPMStates();
+
+	const float fadeDistance = gHUD.FlashlightFadeDistance();
+
+	float falloff = tr.fraction * distance;
+	if( falloff < fadeDistance ) falloff = 1.0f;
+	else falloff = fadeDistance / falloff;
+	falloff *= falloff;
+
+	dlight_t* dl = gEngfuncs.pEfxAPI->CL_AllocDlight(idx); // Create the flashlight using the player's index as key
+	if (dl)
+	{
+		dl->origin = tr.endpos;
+		dl->color = gHUD.FlashlightColor();
+		dl->color.r *= falloff;
+		dl->color.g *= falloff;
+		dl->color.b *= falloff;
+		dl->radius = gHUD.FlashlightRadius();
+		dl->decay = 512; // Flashlight fade speed
+		dl->die = gEngfuncs.GetClientTime() + 0.1f;
+	}
 }
 
 /*
@@ -95,6 +155,8 @@ void DLLEXPORT HUD_TxferLocalOverrides( struct entity_state_s *state, const stru
 
 	// Fire prevention
 	state->iuser4 = client->iuser4;
+
+	g_iLaserDot = (client->flags & FL_LASERDOT) ? 1 : 0;
 }
 
 /*
@@ -158,6 +220,21 @@ void DLLEXPORT HUD_ProcessPlayerState( struct entity_state_s *dst, const struct 
 		g_iUser1 = src->iuser1;
 		g_iUser2 = src->iuser2;
 		g_iUser3 = src->iuser3;
+
+		if (gHUD.CustomFlashlightEnabled())
+		{
+			if ((player->curstate.effects & EF_DIMLIGHT) != 0)
+			{
+				gHUD.m_bFlashlight = true;
+				player->curstate.effects &= ~EF_DIMLIGHT;
+			}
+			else
+			{
+				gHUD.m_bFlashlight = false;
+			}
+		}
+		else if (gHUD.m_bFlashlight)
+			gHUD.m_bFlashlight = false;
 	}
 }
 
@@ -231,7 +308,7 @@ void DLLEXPORT HUD_TxferPredictionData( struct entity_state_s *ps, const struct 
 
 cl_entity_t mymodel[9];
 
-void MoveModel( void )
+void MoveModel()
 {
 	cl_entity_t *player;
 	int i, j;
@@ -276,7 +353,7 @@ extern int hitent;
 
 cl_entity_t hit;
 
-void TraceModel( void )
+void TraceModel()
 {
 	cl_entity_t *ent;
 
@@ -312,7 +389,7 @@ void ParticleCallback( struct particle_s *particle, float frametime )
 }
 
 cvar_t *color = NULL;
-void Particles( void )
+void Particles()
 {
 	static float lasttime;
 	float curtime;
@@ -377,7 +454,7 @@ void TempEntCallback( struct tempent_s *ent, float frametime, float currenttime 
 	}
 }
 
-void TempEnts( void )
+void TempEnts()
 {
 	static float lasttime;
 	float curtime;
@@ -431,7 +508,7 @@ void TempEnts( void )
 // Room for 1 beam ( 0 can't be used )
 static cl_entity_t beams[2];
 
-void BeamEndModel( void )
+void BeamEndModel()
 {
 	cl_entity_t *player, *model;
 	int modelindex;
@@ -466,7 +543,7 @@ void BeamEndModel( void )
 	gEngfuncs.CL_CreateVisibleEntity( ET_NORMAL, model );
 }
 
-void Beams( void )
+void Beams()
 {
 	static float lasttime;
 	float curtime;
@@ -497,6 +574,65 @@ void Beams( void )
 }
 #endif
 
+extern cvar_t *cl_lw;
+
+TEMPENTITY *g_pLaserSpot = NULL;
+
+void CL_UpdateLaserSpot()
+{
+	cl_entity_t *player = gEngfuncs.GetLocalPlayer();
+
+	if( !player ) return;
+
+	if(( g_iLaserDot && cl_lw->value ) && !g_pLaserSpot )
+	{
+		// create laserspot
+		int m_iSpotModel = gEngfuncs.pEventAPI->EV_FindModelIndex( "sprites/laserdot.spr" );
+
+		g_pLaserSpot = gEngfuncs.pEfxAPI->R_TempSprite( Vector( 0, 0, 0), Vector( 0, 0, 0), 1.0, m_iSpotModel, kRenderGlow, kRenderFxNoDissipation, 1.0, 9999, FTENT_SPRCYCLE );
+		if( !g_pLaserSpot ) return;
+
+		g_pLaserSpot->entity.curstate.rendercolor.r = 200;
+		g_pLaserSpot->entity.curstate.rendercolor.g = 12;
+		g_pLaserSpot->entity.curstate.rendercolor.b = 12;
+
+		//		gEngfuncs.Con_Printf( "CLaserSpot::Create()\n" );
+	}
+
+	else if(( !g_iLaserDot || !cl_lw->value ) && g_pLaserSpot )
+	{
+		// destroy laserspot
+		//		gEngfuncs.Con_Printf( "CLaserSpot::Killed()\n" );
+		g_pLaserSpot->die = 0.0f;
+		g_pLaserSpot = NULL;
+		return;
+	}
+	else if( !g_pLaserSpot )
+	{
+		// inactive
+		return;
+	}
+
+	//assert( m_pLaserSpot != NULL );
+
+	Vector forward, vecSrc, vecEnd, origin, angles, view_ofs;
+
+	gEngfuncs.GetViewAngles( (float *)angles );
+
+	AngleVectors( angles, forward, NULL, NULL );
+	gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( view_ofs );
+
+	vecSrc = player->origin + view_ofs;
+	vecEnd = vecSrc + forward * 8192.0f;
+
+	pmtrace_t *trace = gEngfuncs.PM_TraceLine( vecSrc, vecEnd, PM_TRACELINE_ANYVISIBLE, 2, -1 );
+	// update laserspot endpos
+
+	g_pLaserSpot->entity.origin = trace->endpos;
+	g_pLaserSpot->die = gEngfuncs.GetClientTime() + 0.1f;
+}
+
+
 /*
 =========================
 HUD_CreateEntities
@@ -504,7 +640,7 @@ HUD_CreateEntities
 Gives us a chance to add additional entities to the render this frame
 =========================
 */
-void DLLEXPORT HUD_CreateEntities( void )
+void DLLEXPORT HUD_CreateEntities()
 {
 	// e.g., create a persistent cl_entity_t somewhere.
 	// Load an appropriate model into it ( gEngfuncs.CL_LoadModel )
@@ -528,6 +664,10 @@ void DLLEXPORT HUD_CreateEntities( void )
 #endif
 	// Add in any game specific objects
 	Game_AddObjects();
+	CL_UpdateLaserSpot();
+
+	gHUD.objectHintManager.Update();
+	gHUD.keyedDlightManager.Update();
 
 #if USE_VGUI
 	GetClientVoiceMgr()->CreateEntities();
@@ -563,7 +703,14 @@ void DLLEXPORT HUD_StudioEvent( const struct mstudioevent_s *event, const struct
 		break;
 	// Client side sound
 	case 5004:		
-		gEngfuncs.pfnPlaySoundByNameAtLocation( (char *)event->options, 1.0, (float *)&entity->attachment[0] );
+		gEngfuncs.pfnPlaySoundByNameAtLocation( event->options, 1.0, (float *)&entity->attachment[0] );
+		break;
+	case 5005:
+		// TODO: this is a stub for Sven Co-op specific event. Sven Co-op defines muzzle flashes in the external files
+		{
+			if (*event->options != '\0' && atoi(event->options) == 0) // check that this is not an empty string and not a number (Sven Co-op expects the file name)
+				gEngfuncs.pEfxAPI->R_MuzzleFlash( (float *)&entity->attachment[0], 31 );
+		}
 		break;
 	default:
 		break;
@@ -590,6 +737,12 @@ void DLLEXPORT HUD_TempEntUpdate (
 	int			i;
 	TEMPENTITY	*pTemp, *pnext, *pprev;
 	float		/*freq,*/ gravity, gravitySlow, life, fastFreq;
+
+	Vector		vAngles;
+	gEngfuncs.GetViewAngles( (float*)vAngles );
+
+	if ( g_pParticleMan )
+		 g_pParticleMan->SetVariables( cl_gravity, vAngles );
 
 	// Nothing to simulate
 	if( !*ppTempEntActive )	
@@ -674,8 +827,16 @@ void DLLEXPORT HUD_TempEntUpdate (
 				// Scale is next think time
 				if( client_time > pTemp->entity.baseline.scale )
 				{
+					SparkEffectParams sparkParams;
+					sparkParams.streakCount = pTemp->entity.curstate.iuser2 > 0 ? pTemp->entity.curstate.iuser2 : 8;
+					sparkParams.streakVelocity = pTemp->entity.curstate.iuser3 > 0 ? pTemp->entity.curstate.iuser3 : 200;
+					sparkParams.sparkModelIndex = pTemp->entity.curstate.iuser1;
+					sparkParams.sparkDuration = pTemp->entity.curstate.fuser1;
+					sparkParams.sparkScaleMin = pTemp->entity.curstate.fuser2;
+					sparkParams.sparkScaleMax = pTemp->entity.curstate.fuser3;
+					sparkParams.flags = pTemp->entity.curstate.iuser4;
 					// Show Sparks
-					gEngfuncs.pEfxAPI->R_SparkEffect( pTemp->entity.origin, 8, -200, 200 );
+					FX_SparkEffect( pTemp->entity.origin, sparkParams );
 
 					// Reduce life
 					pTemp->entity.baseline.framerate -= 0.1f;
@@ -768,7 +929,7 @@ void DLLEXPORT HUD_TempEntUpdate (
 
 			if( pTemp->flags & ( FTENT_COLLIDEALL | FTENT_COLLIDEWORLD ) )
 			{
-				vec3_t	traceNormal( 0.0f, 0.0f, 0.0f );
+				Vector	traceNormal( 0.0f, 0.0f, 0.0f );
 				float	traceFraction = 1;
 
 				if( pTemp->flags & FTENT_COLLIDEALL )

@@ -20,6 +20,8 @@
 # SOFTWARE.
 #
 
+set (CMAKE_CXX_STANDARD 11)
+
 # 3.9 added captures in if(MATCHES)
 cmake_minimum_required(VERSION 3.9)
 
@@ -36,14 +38,12 @@ include(CheckCSourceCompiles)
 include(VSForceXPToolchain) # Force XP toolchain for Visual Studio
 include(CheckIPOSupported)
 
-project (HLSDK-PORTABLE)
+project (HLSDK-FEATUREFUL)
 
 #--------------
 # USER DEFINES \
 ################\
 option(USE_VGUI "Enable VGUI1." OFF)
-option(USE_NOVGUI_MOTD "Prefer non-VGUI MOTD when USE_VGUI is enabled" OFF)
-option(USE_NOVGUI_SCOREBOARD "Prefer non-VGUI Scoreboard when USE_VGUI is enabled" OFF)
 option(USE_VOICEMGR "Enable VOICE MANAGER." OFF)
 option(BUILD_CLIENT "Build client dll" ON)
 option(BUILD_SERVER "Build server dll" ON)
@@ -155,6 +155,10 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Android")
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__TERMUX__=1")
 		set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -D__TERMUX__=1")
 	endif()
+endif()
+
+if(${CMAKE_SYSTEM_NAME} STREQUAL "iOS" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+	set(CMAKE_CXX_STANDARD 14)
 endif()
 
 # Xash3D FWGS Library Naming Scheme compliance

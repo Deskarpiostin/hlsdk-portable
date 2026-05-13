@@ -8,9 +8,9 @@
 #include "hud.h"
 
 #include "cl_util.h"
-#include <assert.h>
-#include <string.h>
-#include <stdio.h>
+#include <cassert>
+#include <cstring>
+#include <cstdio>
 #include "parsemsg.h"
 #include "demo.h"
 #include "demo_api.h"
@@ -293,7 +293,7 @@ int CVoiceStatus::VidInit()
 	}
 
 	m_VoiceHeadModel = gEngfuncs.pfnSPR_Load("sprites/voiceicon.spr");
-	return TRUE;
+	return 1;
 }
 
 

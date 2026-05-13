@@ -16,9 +16,7 @@
 #if !defined(TALKMONSTER_H)
 #define TALKMONSTER_H
 
-#if !defined(MONSTERS_H)
-#include "monsters.h"
-#endif
+#include "followingmonster.h"
 
 //=========================================================
 // Talking monster base class
@@ -38,7 +36,15 @@
 #define bit_saidHeard			(1<<6)
 #define bit_saidSmelled			(1<<7)
 
-#define TLK_CFRIENDS		3
+#define TLK_CFRIENDS		20
+#define NUM_MEDICS 5
+
+enum
+{
+	TALK_FRIEND_UNKNOWN = 0,
+	TALK_FRIEND_PERSONNEL = 1,
+	TALK_FRIEND_SOLDIER = 2,
+};
 
 typedef enum
 {
@@ -48,6 +54,7 @@ typedef enum
 	TLK_STARE,
 	TLK_USE,
 	TLK_UNUSE,
+	TLK_DECLINE,
 	TLK_STOP,
 	TLK_NOSHOOT,
 	TLK_HELLO,
@@ -60,27 +67,22 @@ typedef enum
 	TLK_SMELL,
 	TLK_WOUND,
 	TLK_MORTAL,
+	TLK_SHOT,
+	TLK_MAD,
+	TLK_KILL,
+	TLK_ATTACK,
 
 	TLK_CGROUPS					// MUST be last entry
 } TALKGROUPNAMES;
 
 enum
 {
-	SCHED_CANT_FOLLOW = LAST_COMMON_SCHEDULE + 1,
-	SCHED_MOVE_AWAY,		// Try to get out of the player's way
-	SCHED_MOVE_AWAY_FOLLOW,	// same, but follow afterward
-	SCHED_MOVE_AWAY_FAIL,	// Turn back toward player
-
-	LAST_TALKMONSTER_SCHEDULE		// MUST be last
+	LAST_TALKMONSTER_SCHEDULE = LAST_FOLLOWINGMONSTER_SCHEDULE,
 };
 
 enum
 {
-	TASK_CANT_FOLLOW = LAST_COMMON_TASK + 1,
-	TASK_MOVE_AWAY_PATH,
-	TASK_WALK_PATH_FOR_UNITS,
-
-	TASK_TLK_RESPOND,		// say my response
+	TASK_TLK_RESPOND = LAST_FOLLOWINGMONSTER_TASK,		// say my response
 	TASK_TLK_SPEAK,			// question or remark
 	TASK_TLK_HELLO,			// Try to say hello to player
 	TASK_TLK_HEADRESET,		// reset head position
@@ -90,91 +92,191 @@ enum
 	TASK_TLK_CLIENT_STARE,	// same as look at client, but says something if the player stares.
 	TASK_TLK_EYECONTACT,	// maintain eyecontact with person who I'm talking to
 	TASK_TLK_IDEALYAW,		// set ideal yaw to face who I'm talking to
-	TASK_FACE_PLAYER,		// Face the player
+	TASK_FIND_MEDIC,		// Try to find and call someone who can heal me
 
 	LAST_TALKMONSTER_TASK			// MUST be last
 };
 
-class CTalkMonster : public CBaseMonster
+enum
+{
+	TOLERANCE_DEFAULT,
+	TOLERANCE_ZERO,
+	TOLERANCE_LOW,
+	TOLERANCE_AVERAGE,
+	TOLERANCE_HIGH,
+	TOLERANCE_ABSOLUTE,
+	TOLERANCE_ABSOLUTE_NO_ALERTS,
+};
+
+enum
+{
+	ALERT_FRIENDS_ON_DEATH_DEAFAULT,
+	ALERT_FRIENDS_ON_DEATH_ALWAYS,
+	ALERT_FRIENDS_ON_DEATH_IF_NOT_IN_COMBAT,
+	ALERT_FRIENDS_ON_DEATH_NEVER,
+};
+
+enum
+{
+	ALERTED_BY_FRIEND_DEATH_DEFAULT,
+	ALERTED_BY_FRIEND_DEATH_YES,
+	ALERTED_BY_FRIEND_DEATH_NO,
+};
+
+#define	SPEAK_NORMAL_CHECK 0
+#define	SPEAK_DISREGARD_ENEMY (1 << 0)
+#define	SPEAK_DISREGARD_OTHER_SPEAKING (1 << 1)
+
+class CTalkMonster : public CFollowingMonster
 {
 public:
-	void			TalkInit( void );				
-	CBaseEntity		*FindNearestFriend(BOOL fPlayer);
-	float			TargetDistance( void );
-	void			StopTalking( void ) { SentenceStop(); }
+	void			TalkInit();
+	CBaseEntity		*FindNearestFriend(bool fPlayer);
+	float			TargetDistance();
+	void			StopTalking() { SentenceStop(); }
 	
 	// Base Monster functions
-	void			Precache( void );
-	int				TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType);
-	void			Touch(	CBaseEntity *pOther );
-	void			Killed( entvars_t *pevAttacker, int iGib );
-	int				IRelationship ( CBaseEntity *pTarget );
-	virtual int		CanPlaySentence( BOOL fDisregardState );
-	virtual void	PlaySentence( const char *pszSentence, float duration, float volume, float attenuation );
-	void			PlayScriptedSentence( const char *pszSentence, float duration, float volume, float attenuation, BOOL bConcurrent, CBaseEntity *pListener );
-	void			KeyValue( KeyValueData *pkvd );
+	TakeDamageResult TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, const DamageInfo& damageInfo) override;
+	int 			TakeHealth(CBaseEntity* pHealer, float flHealth, int bitsDamageType) override;
+	bool			CanBeMadeMoveAway(CBaseEntity *pPusher) override;
+	KilledResult	Killed( entvars_t *pevInflictor, entvars_t *pevAttacker, int iGib ) override;
+	void			OnDying(bool gibbed) override;
+	void			StartMonster() override;
+	int				IRelationship ( CBaseEntity *pTarget ) override;
+	bool			IsFriendWithPlayerBeforeProvoked();
+	bool	CanPlaySentence( bool fDisregardState ) override;
+	bool PlaySentence( const char *pszSentence, float duration, float volume, float attenuation, bool subtitle = false ) override;
+	void			PlayScriptedSentence(const char *pszSentence, float duration, float volume, float attenuation, bool bConcurrent, CBaseEntity *pListener ) override;
+	PainSoundRule DefaultPainSoundRule() override;
+	void			KeyValue( KeyValueData *pkvd ) override;
 
 	// AI functions
-	void			SetActivity ( Activity newActivity );
-	Schedule_t		*GetScheduleOfType ( int Type );
-	void			StartTask( Task_t *pTask );
-	void			RunTask( Task_t *pTask );
-	void			HandleAnimEvent( MonsterEvent_t *pEvent );
-	void			PrescheduleThink( void );
-	
+	void			SetActivity ( Activity newActivity ) override;
+	Schedule_t		*GetScheduleOfType ( int Type ) override;
+	void			StartTask( Task_t *pTask ) override;
+	void			RunTask( Task_t *pTask ) override;
+	void			HandleAnimEvent( MonsterEvent_t *pEvent ) override;
+	void			PrescheduleThink() override;
+	void			ReactToPlayerHit(entvars_t* pevInflictor, entvars_t* pevAttacker, const DamageInfo& damageInfo);
+	void			TalkMonsterInit();
+
 	// Conversations / communication
-	int				GetVoicePitch( void );
-	void			IdleRespond( void );
-	int				FIdleSpeak( void );
-	int				FIdleStare( void );
-	int				FIdleHello( void );
-	void			IdleHeadTurn( Vector &vecFriend );
-	int				FOkToSpeak( void );
-	void			TrySmellTalk( void );
-	CBaseEntity		*EnumFriends( CBaseEntity *pentPrevious, int listNumber, BOOL bTrace );
-	void			AlertFriends( void );
-	void			ShutUpFriends( void );
-	BOOL			IsTalking( void );
-	void			Talk( float flDuration );	
+	int				GetVoicePitch();
+	virtual int GetDefaultVoicePitch() { return 100; }
+	void PrepareVoicePitch();
+	virtual void	IdleRespond();
+	virtual bool	AskQuestion( float duration );
+	virtual bool	SetAnswerQuestion( CTalkMonster *pSpeaker );
+	virtual void	MakeIdleStatement();
+	float			RandomSentenceDuraion();
+	bool			GotIdleSpeakChance();
+	bool			FIdleSpeak();
+	bool			FIdleStare();
+	bool			FIdleHello();
+	bool			FOkToSpeak( int speakFlags = SPEAK_NORMAL_CHECK );
+	void			TrySmellTalk();
+	CBaseEntity		*EnumFriends( CBaseEntity *pentPrevious, int listNumber, bool bTrace );
+	CBaseEntity		*EnumFriends(CBaseEntity *pentPrevious, const char* pszFriend, bool bTrace );
+	void			AlertFriends();
+	void			ShutUpFriends();
+	bool			IsTalking();
+	void			Talk( float flDuration );
+	virtual const char* DefaultSentenceGroup(int group) { return nullptr; }
+	virtual const char* SentenceGroup(int group);
+	bool EmitSoundScriptTalk(const char* name);
 
-	// For following
-	BOOL			CanFollow( void );
-	BOOL			IsFollowing( void ) { return m_hTargetEnt != 0 && m_hTargetEnt->IsPlayer(); }
-	void			StopFollowing( BOOL clearSchedule );
-	void			StartFollowing( CBaseEntity *pLeader );
-	virtual void	DeclineFollowing( void ) {}
-	void			LimitFollowers( CBaseEntity *pPlayer, int maxFollowers );
+	// Following related
+	void			StartFollowing( CBaseEntity *pLeader, bool saySentence = true ) override;
+	void			LimitFollowers( CBaseEntity *pPlayer, int maxFollowers ) override;
+	virtual int		TalkFriendCategory() { return TALK_FRIEND_PERSONNEL; }
+	bool	InScriptedSentence() override;
+	bool AllowUseDuringScriptedSentence() override;
+	void PlayUseSentence() override;
+	void PlayUnUseSentence() override;
+	void DeclineFollowing(CBaseEntity* pCaller) override;
+	CTalkMonster* MyTalkMonsterPointer() override { return this; }
 
-	void EXPORT		FollowerUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
-	
-	virtual void	SetAnswerQuestion( CTalkMonster *pSpeaker );
-	virtual int		FriendNumber( int arrayNumber )	{ return arrayNumber; }
+	// Medic related
+	bool			WantsToCallMedic();
+	bool			CanCallThisMedic(CSquadMonster* pOther);
+	bool			FindAndCallMedic();
+	virtual void	PlayCallForMedic();
+	bool			IsWounded();
+	bool			IsHeavilyWounded();
 
-	virtual int		Save( CSave &save );
-	virtual int		Restore( CRestore &restore );
+	// Utility functions
+	bool CanIdleFlinch() {
+		return m_flNextFlinch < gpGlobals->time;
+	}
+
+	int		Save( CSave &save ) override;
+	int		Restore( CRestore &restore ) override;
 	static	TYPEDESCRIPTION m_SaveData[];
 
-	
-	static const char *m_szFriends[TLK_CFRIENDS];		// array of friend names
+	int DefaultSizeForGrapple() override { return GRAPPLE_MEDIUM; }
+	bool IsDisplaceable() override { return true; }
+	Vector DefaultMinHullSize() override { return VEC_HUMAN_HULL_MIN; }
+	Vector DefaultMaxHullSize() override { return VEC_HUMAN_HULL_MAX; }
+
+	virtual int DefaultToleranceLevel() { return TOLERANCE_LOW; }
+	int MyToleranceLevel() { return m_iTolerance ? m_iTolerance : DefaultToleranceLevel(); }
+
+	virtual short AlertFriendsDefaultPolicy();
+	short AlertFriendsPolicy() { return m_alertFriendsPolicy ? m_alertFriendsPolicy : AlertFriendsDefaultPolicy(); }
+	bool ShouldAlertFriendsOnDeath();
+
+	virtual bool AlertableByFriendDeathDefault();
+	bool AlertableByFriendDeath();
+
+	static const char* GetRedefinedSentence(string_t sentence);
+
+	void ReportAIState(ALERT_TYPE level) override;
+
+	struct TalkFriend
+	{
+		char name[64];
+		bool canFollow;
+		short category;
+	};
+
+	static TalkFriend m_szFriends[TLK_CFRIENDS];		// array of friend names
+	static char m_szMedics[NUM_MEDICS][64];
 	static float g_talkWaitTime;
-	
+	static bool SomeoneIsTalking();
+	static void RegisterTalkMonster(const char* className, bool canFollow, short followerCategory);
+	void RegisterTalkMonster(bool canFollow = true);
+	static void RegisterMedic(const char* className);
+	void RegisterMedic();
+
 	int			m_bitsSaid;						// set bits for sentences we don't want repeated
 	int			m_nSpeak;						// number of times initiated talking
 	int			m_voicePitch;					// pitch of voice for this head
-	const char	*m_szGrp[TLK_CGROUPS];			// sentence group names
 	float		m_useTime;						// Don't allow +USE until this time
 	string_t			m_iszUse;						// Custom +USE sentence group (follow)
 	string_t			m_iszUnUse;						// Custom +USE sentence group (stop following)
+	string_t			m_iszDecline;					// Custom +USE sentence group (decline following)
+	string_t			m_iszSpeakAs;
 
 	float		m_flLastSaidSmelled;// last time we talked about something that stinks
 	float		m_flStopTalkTime;// when in the future that I'll be done saying this sentence.
+	float		m_flMedicWaitTime;
 
 	EHANDLE		m_hTalkTarget;	// who to look at while talking
+	bool m_fStartSuspicious;
+	short m_iTolerance;
+	short m_alertFriendsPolicy;
+	short m_alertableByFriends;
+	float m_flLastHitByPlayer;
+	int m_iPlayerHits;
+
+	float m_flStopLookTime;
+	float m_flNextFlinch;
+
+	bool m_allowUseScriptedSentence;
+
 	CUSTOM_SCHEDULES
 };
 
-// Clients can push talkmonsters out of their way
-#define		bits_COND_CLIENT_PUSH		( bits_COND_SPECIAL1 )
 // Don't see a client right now.
 #define		bits_COND_CLIENT_UNSEEN		( bits_COND_SPECIAL2 )
 

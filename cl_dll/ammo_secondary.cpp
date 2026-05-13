@@ -20,14 +20,12 @@
 
 #include "hud.h"
 #include "cl_util.h"
-#include <string.h>
-#include <stdio.h>
 #include "parsemsg.h"
 
 DECLARE_MESSAGE( m_AmmoSecondary, SecAmmoVal )
 DECLARE_MESSAGE( m_AmmoSecondary, SecAmmoIcon )
 
-int CHudAmmoSecondary::Init( void )
+int CHudAmmoSecondary::Init()
 {
 	HOOK_MESSAGE( SecAmmoVal );
 	HOOK_MESSAGE( SecAmmoIcon );
@@ -43,12 +41,12 @@ int CHudAmmoSecondary::Init( void )
 	return 1;
 }
 
-void CHudAmmoSecondary::Reset( void )
+void CHudAmmoSecondary::Reset()
 {
 	m_fFade = 0;
 }
 
-int CHudAmmoSecondary::VidInit( void )
+int CHudAmmoSecondary::VidInit()
 {
 	return 1;
 }
@@ -60,7 +58,7 @@ int CHudAmmoSecondary::Draw( float flTime )
 
 	// draw secondary ammo icons above normal ammo readout
 	int a, x, y, r, g, b, AmmoWidth;
-	UnpackRGB( r, g, b, RGB_YELLOWISH );
+	UnpackRGB( r, g, b, gHUD.HUDColor() );
 	a = (int)Q_max( MIN_ALPHA, m_fFade );
 	if( m_fFade > 0 )
 		m_fFade -= ( (float)gHUD.m_flTimeDelta * 20.0f );  // slowly lower alpha to fade out icons

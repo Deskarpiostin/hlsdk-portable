@@ -16,10 +16,8 @@
 //  hud_update.cpp
 //
 
-#include <cmath>
 #include "hud.h"
 #include "cl_util.h"
-#include <stdlib.h>
 
 int CL_ButtonBits( int );
 void CL_ResetButtonBits( int bits );
@@ -30,11 +28,20 @@ extern void HUD_SetCmdBits( int bits );
 
 int CHud::UpdateClientData( client_data_t *cdata, float time )
 {
-	memcpy( m_vecOrigin, cdata->origin, sizeof(vec3_t) );
-	memcpy( m_vecAngles, cdata->viewangles, sizeof(vec3_t) );
+	memcpy( m_vecOrigin, cdata->origin, sizeof(Vector) );
+	memcpy( m_vecAngles, cdata->viewangles, sizeof(Vector) );
+
+	int oldKeyBits = m_iKeyBits;
 
 	m_iKeyBits = CL_ButtonBits( 0 );
-	m_iWeaponBits = cdata->iWeaponBits;
+
+	if ((oldKeyBits & IN_ATTACK) == 0 && (m_iKeyBits & IN_ATTACK) != 0 && HandleClientButton(IN_ATTACK))
+	{
+		m_iKeyBits &= ~IN_ATTACK;
+	}
+
+	//Handled in MsgFunc_Weapons now.
+	//m_iWeaponBits = cdata->iWeaponBits;
 
 	in_fov = cdata->fov;
 

@@ -11,6 +11,7 @@
 
 #include "cl_entity.h"
 #include "interpolation.h"
+#include "hud.h"
 
 #define INSET_OFF			0
 #define	INSET_CHASE_FREE		1
@@ -24,7 +25,7 @@
 #define OVERVIEW_MAX_LAYERS		1
 
 extern void VectorAngles( const float *forward, float *angles );
-extern "C" void NormalizeAngles( float *angles );
+void NormalizeAngles( float *angles );
 
 //-----------------------------------------------------------------------------
 // Purpose: Handles the drawing of the spectator stuff (camera & top-down map and all the things on it )
@@ -33,7 +34,7 @@ extern "C" void NormalizeAngles( float *angles );
 typedef struct overviewInfo_s
 {
 	char		map[64];	// cl.levelname or empty
-	vec3_t		origin;		// center of map
+	Vector		origin;		// center of map
 	float		zoom;		// zoom of map images
 	int		layers;		// how may layers do we have
 	float		layersHeights[OVERVIEW_MAX_LAYERS];
@@ -56,8 +57,8 @@ typedef struct overviewEntity_s
 typedef struct cameraWayPoint_s
 {
 	float	time;
-	vec3_t	position;
-	vec3_t	angle;
+	Vector	position;
+	Vector	angle;
 	float	fov;
 	int	flags;
 } cameraWayPoint_t;
@@ -68,10 +69,10 @@ typedef struct cameraWayPoint_s
 class CHudSpectator : public CHudBase
 {
 public:
-	void Reset();
+	void Reset() override;
 	int  ToggleInset( bool allowOff );
 	void CheckSettings();
-	void InitHUDData( void );
+	void InitHUDData() override;
 	bool AddOverviewEntityToList( HSPRITE sprite, cl_entity_t * ent, double killTime );
 	void DeathMessage( int victim );
 	bool AddOverviewEntity( int type, struct cl_entity_s *ent, const char *modelname );
@@ -90,15 +91,15 @@ public:
 	void FindPlayer( const char *name );
 	void DirectorMessage( int iSize, void *pbuf );
 	void SetSpectatorStartPosition();
-	int Init();
-	int VidInit();
+	int Init() override;
+	int VidInit() override;
 
-	int Draw( float flTime );
+	int Draw( float flTime ) override;
 
-	void	AddWaypoint( float time, vec3_t pos, vec3_t angle, float fov, int flags );
-	void	SetCameraView( vec3_t pos, vec3_t angle, float fov );
+	void	AddWaypoint( float time, Vector pos, Vector angle, float fov, int flags );
+	void	SetCameraView( Vector pos, Vector angle, float fov );
 	float	GetFOV();
-	bool	GetDirectorCamera( vec3_t &position, vec3_t &angle );
+	bool	GetDirectorCamera( Vector &position, Vector &angle );
 	void	SetWayInterpolation( cameraWayPoint_t *prev, cameraWayPoint_t *start, cameraWayPoint_t *end, cameraWayPoint_t *next );
 
 
@@ -112,7 +113,7 @@ public:
 	int			m_iSpectatorNumber;
 
 	float			m_mapZoom;		// zoom the user currently uses
-	vec3_t			m_mapOrigin;	// origin where user rotates around
+	Vector			m_mapOrigin;	// origin where user rotates around
 	cvar_t			*m_drawnames;
 	cvar_t			*m_drawcone;
 	cvar_t			*m_drawstatus;
@@ -125,12 +126,12 @@ public:
 	int				m_ChaseEntity;	// if != 0, follow this entity with viewangles
 	int				m_WayPoint;	// current waypoint 1
 	int				m_NumWayPoints;	// current number of waypoints
-	vec3_t				m_cameraOrigin;	// a help camera
-	vec3_t				m_cameraAngles;	// and it's angles
+	Vector				m_cameraOrigin;	// a help camera
+	Vector				m_cameraAngles;	// and it's angles
 	CInterpolation			m_WayInterpolation;
 
 private:
-	vec3_t		m_vPlayerPos[MAX_PLAYERS];
+	Vector		m_vPlayerPos[MAX_PLAYERS];
 	HSPRITE		m_hsprPlayerBlue;
 	HSPRITE		m_hsprPlayerRed;
 	HSPRITE		m_hsprPlayer;

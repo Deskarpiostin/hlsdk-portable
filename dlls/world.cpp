@@ -33,16 +33,22 @@
 #include "weapons.h"
 #include "gamerules.h"
 #include "teamplay_gamerules.h"
+#include "game.h"
+#include "savetitles.h"
+#include "string_utils.h"
+#include "common_soundscripts.h"
+#include "objecthint_spec.h"
+#include "warpball.h"
+#include "error_collector.h"
 
-extern CGraph WorldGraph;
 extern CSoundEnt *pSoundEnt;
 
 extern CBaseEntity				*g_pLastSpawn;
 DLL_GLOBAL edict_t				*g_pBodyQueueHead;
 CGlobalState					gGlobalState;
-extern DLL_GLOBAL int				gDisplayTitle;
+extern DLL_GLOBAL bool				gDisplayTitle;
 
-extern void W_Precache( void );
+extern void W_Precache( CBaseEntity* pWorld );
 
 //
 // This must match the list in util.h
@@ -90,6 +96,15 @@ DLL_DECALLIST gDecals[] = {
 	{ "{smscorch3", 0 },		// DECAL_SMALLSCORCH3,	// Small scorch mark
 	{ "{mommablob", 0 },		// DECAL_MOMMABIRTH		// BM Birth spray
 	{ "{mommablob", 0 },		// DECAL_MOMMASPLAT		// BM Mortar spray?? need decal
+	{ "{spr_splt1", 0 },
+	{ "{spr_splt2", 0 },
+	{ "{spr_splt3", 0 },
+	{ "{ofscorch1", 0 },
+	{ "{ofscorch2", 0 },
+	{ "{ofscorch3", 0 },
+	{ "{ofsmscorch1", 0 },
+	{ "{ofsmscorch2", 0 },
+	{ "{ofsmscorch3", 0 }
 };
 
 /*
@@ -105,16 +120,16 @@ BODY QUE
 class CDecal : public CBaseEntity
 {
 public:
-	void Spawn( void );
-	void KeyValue( KeyValueData *pkvd );
-	void EXPORT StaticDecal( void );
+	void Spawn() override;
+	void KeyValue( KeyValueData *pkvd ) override;
+	void EXPORT StaticDecal();
 	void EXPORT TriggerDecal( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 };
 
 LINK_ENTITY_TO_CLASS( infodecal, CDecal )
 
 // UNDONE:  These won't get sent to joining players in multi-player
-void CDecal::Spawn( void )
+void CDecal::Spawn()
 {
 	if( pev->skin < 0 || ( gpGlobals->deathmatch && FBitSet( pev->spawnflags, SF_DECAL_NOTINDEATHMATCH ) ) )
 	{
@@ -147,9 +162,7 @@ void CDecal::TriggerDecal( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TY
 
 	MESSAGE_BEGIN( MSG_BROADCAST, SVC_TEMPENTITY );
 		WRITE_BYTE( TE_BSPDECAL );
-		WRITE_COORD( pev->origin.x );
-		WRITE_COORD( pev->origin.y );
-		WRITE_COORD( pev->origin.z );
+		WRITE_VECTOR( pev->origin );
 		WRITE_SHORT( (int)pev->skin );
 		entityIndex = (short)ENTINDEX( trace.pHit );
 		WRITE_SHORT( entityIndex );
@@ -161,7 +174,7 @@ void CDecal::TriggerDecal( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TY
 	pev->nextthink = gpGlobals->time + 0.1f;
 }
 
-void CDecal::StaticDecal( void )
+void CDecal::StaticDecal()
 {
 	TraceResult trace;
 	int entityIndex, modelIndex;
@@ -197,12 +210,12 @@ void CDecal::KeyValue( KeyValueData *pkvd )
 // Body queue class here.... It's really just CBaseEntity
 class CCorpse : public CBaseEntity
 {
-	virtual int ObjectCaps( void ) { return FCAP_DONT_SAVE; }	
+	int ObjectCaps() override { return FCAP_DONT_SAVE; }
 };
 
 LINK_ENTITY_TO_CLASS( bodyque, CCorpse )
 
-static void InitBodyQue( void )
+static void InitBodyQue()
 {
 	string_t istrClassname = MAKE_STRING( "bodyque" );
 
@@ -256,24 +269,24 @@ void CopyToBodyQue( entvars_t *pev )
 	g_pBodyQueueHead = pevHead->owner;
 }
 
-CGlobalState::CGlobalState( void )
+CGlobalState::CGlobalState()
 {
 	Reset();
 }
 
-void CGlobalState::Reset( void )
+void CGlobalState::Reset()
 {
 	m_pList = NULL; 
 	m_listCount = 0;
 }
 
-globalentity_t *CGlobalState::Find( string_t globalname )
+globalentity_t *CGlobalState::Find( const char *globalname )
 {
-	if( !globalname )
+	if( !globalname || *globalname == '\0' )
 		return NULL;
 
 	globalentity_t *pTest;
-	const char *pEntityName = STRING( globalname );
+	const char *pEntityName = globalname;
 
 	pTest = m_pList;
 	while( pTest )
@@ -287,9 +300,16 @@ globalentity_t *CGlobalState::Find( string_t globalname )
 	return pTest;
 }
 
+globalentity_t *CGlobalState::Find( string_t globalname )
+{
+	if( !globalname )
+		return NULL;
+	return Find(STRING(globalname));
+}
+
 // This is available all the time now on impulse 104, remove later
 //#if _DEBUG
-void CGlobalState::DumpGlobals( void )
+void CGlobalState::DumpGlobals()
 {
 	static const char *estates[] = { "Off", "On", "Dead" };
 	globalentity_t *pTest;
@@ -298,13 +318,13 @@ void CGlobalState::DumpGlobals( void )
 	pTest = m_pList;
 	while( pTest )
 	{
-		ALERT( at_console, "%s: %s (%s)\n", pTest->name, pTest->levelName, estates[pTest->state] );
+		ALERT( at_console, "%s: %s (state: %s, value: %d)\n", pTest->name, pTest->levelName, estates[pTest->state], pTest->value );
 		pTest = pTest->pNext;
 	}
 }
 //#endif
 
-void CGlobalState::EntityAdd( string_t globalname, string_t mapName, GLOBALESTATE state )
+void CGlobalState::EntityAdd(const char* globalname, string_t mapName, GLOBALESTATE state, int value)
 {
 	ASSERT( !Find( globalname ) );
 
@@ -312,25 +332,68 @@ void CGlobalState::EntityAdd( string_t globalname, string_t mapName, GLOBALESTAT
 	ASSERT( pNewEntity != NULL );
 	pNewEntity->pNext = m_pList;
 	m_pList = pNewEntity;
-	strcpy( pNewEntity->name, STRING( globalname ) );
-	strcpy( pNewEntity->levelName, STRING( mapName ) );
+	strncpyEnsureTermination( pNewEntity->name, globalname );
+	strncpyEnsureTermination( pNewEntity->levelName, STRING( mapName ) );
 	pNewEntity->state = state;
+	pNewEntity->value = value;
 	m_listCount++;
+}
+
+void CGlobalState::EntityAdd(string_t globalname, string_t mapName, GLOBALESTATE state, int value)
+{
+	return EntityAdd(STRING(globalname), mapName, state, value);
+}
+
+void CGlobalState::EntitySetState( const char* globalname, GLOBALESTATE state )
+{
+	globalentity_t *pEnt = Find( globalname );
+	if( pEnt )
+		pEnt->state = state;
 }
 
 void CGlobalState::EntitySetState( string_t globalname, GLOBALESTATE state )
 {
 	globalentity_t *pEnt = Find( globalname );
-
 	if( pEnt )
 		pEnt->state = state;
 }
 
-const globalentity_t *CGlobalState :: EntityFromTable( string_t globalname )
+void CGlobalState::IncrementValue(string_t globalname)
 {
 	globalentity_t *pEnt = Find( globalname );
+	if( pEnt )
+		pEnt->value += 1;
+}
 
-	return pEnt;
+void CGlobalState::DecrementValue(string_t globalname)
+{
+	globalentity_t *pEnt = Find( globalname );
+	if( pEnt )
+		pEnt->value -= 1;
+}
+
+void CGlobalState::SetValue(const char* globalname, int value)
+{
+	globalentity_t *pEnt = Find( globalname );
+	if( pEnt )
+		pEnt->value = value;
+}
+
+void CGlobalState::SetValue(string_t globalname, int value)
+{
+	globalentity_t *pEnt = Find( globalname );
+	if( pEnt )
+		pEnt->value = value;
+}
+
+const globalentity_t *CGlobalState::EntityFromTable( const char* globalname )
+{
+	return Find( globalname );
+}
+
+const globalentity_t *CGlobalState::EntityFromTable( string_t globalname )
+{
+	return Find( globalname );
 }
 
 GLOBALESTATE CGlobalState::EntityGetState( string_t globalname )
@@ -340,6 +403,14 @@ GLOBALESTATE CGlobalState::EntityGetState( string_t globalname )
 		return pEnt->state;
 
 	return GLOBAL_OFF;
+}
+
+int CGlobalState::GetValue(string_t globalname)
+{
+	globalentity_t *pEnt = Find( globalname );
+	if( pEnt )
+		return pEnt->value;
+	return 0;
 }
 
 // Global Savedata for Delay
@@ -354,6 +425,7 @@ TYPEDESCRIPTION	gGlobalEntitySaveData[] =
 	DEFINE_ARRAY( globalentity_t, name, FIELD_CHARACTER, 64 ),
 	DEFINE_ARRAY( globalentity_t, levelName, FIELD_CHARACTER, 32 ),
 	DEFINE_FIELD( globalentity_t, state, FIELD_INTEGER ),
+	DEFINE_FIELD( globalentity_t, value, FIELD_INTEGER ),
 };
 
 int CGlobalState::Save( CSave &save )
@@ -392,7 +464,7 @@ int CGlobalState::Restore( CRestore &restore )
 	{
 		if( !restore.ReadFields( "GENT", &tmpEntity, gGlobalEntitySaveData, ARRAYSIZE( gGlobalEntitySaveData ) ) )
 			return 0;
-		EntityAdd( MAKE_STRING( tmpEntity.name ), MAKE_STRING( tmpEntity.levelName ), tmpEntity.state );
+		EntityAdd( MAKE_STRING( tmpEntity.name ), MAKE_STRING( tmpEntity.levelName ), tmpEntity.state, tmpEntity.value );
 	}
 	return 1;
 }
@@ -405,7 +477,7 @@ void CGlobalState::EntityUpdate( string_t globalname, string_t mapname )
 		strcpy( pEnt->levelName, STRING( mapname ) );
 }
 
-void CGlobalState::ClearStates( void )
+void CGlobalState::ClearStates()
 {
 	globalentity_t *pFree = m_pList;
 	while( pFree )
@@ -429,10 +501,10 @@ void RestoreGlobalState( SAVERESTOREDATA *pSaveData )
 	gGlobalState.Restore( restoreHelper );
 }
 
-void ResetGlobalState( void )
+void ResetGlobalState()
 {
 	gGlobalState.ClearStates();
-	gInitHUD = TRUE;	// Init the HUD on a new game / load game
+	gInitHUD = true;	// Init the HUD on a new game / load game
 }
 
 // moved CWorld class definition to cbase.h
@@ -444,20 +516,19 @@ void ResetGlobalState( void )
 
 LINK_ENTITY_TO_CLASS( worldspawn, CWorld )
 
-#define SF_WORLD_DARK		0x0001		// Fade from black at startup
-#define SF_WORLD_TITLE		0x0002		// Display game title at startup
-#define SF_WORLD_FORCETEAM	0x0004		// Force teams
+extern DLL_GLOBAL bool		g_fGameOver;
 
-extern DLL_GLOBAL BOOL		g_fGameOver;
-
-void CWorld::Spawn( void )
+void CWorld::Spawn()
 {
-	g_fGameOver = FALSE;
+	g_fGameOver = false;
 	Precache();
+	AddMapBSPAsPrecachedModel();
 }
 
-void CWorld::Precache( void )
+void CWorld::Precache()
 {
+	static bool worldInitAtLeastOnce = false;
+
 	g_pLastSpawn = NULL;
 #if 1
 	CVAR_SET_STRING( "sv_gravity", "800" ); // 67ft/sec
@@ -476,6 +547,15 @@ void CWorld::Precache( void )
 	}
 
 	g_pGameRules = InstallGameRules();
+
+	if (IsDeveloperModeOn() && worldInitAtLeastOnce)
+	{
+		ALERT(at_console, "Re-parsing mod server configs\n");
+		ParseModConfigs();
+	}
+	SetWeaponParameters();
+	ParseCoopGameProfiles();
+	worldInitAtLeastOnce = true;
 
 	//!!!UNDONE why is there so much Spawn code in the Precache function? I'll just keep it here 
 
@@ -500,18 +580,23 @@ void CWorld::Precache( void )
 
 	// the area based ambient sounds MUST be the first precache_sounds
 	// player precaches
-	W_Precache();				// get weapon precaches
+	W_Precache(this);				// get weapon precaches
 
 	ClientPrecache();
+
+	RegisterAndPrecacheSoundScript(NPC::bodySplatSoundScript);
 
 	// sounds used from C physics code
 	PRECACHE_SOUND( "common/null.wav" );// clears sound channels
 
-	PRECACHE_SOUND( "items/suitchargeok1.wav" );//!!! temporary sound for respawning weapons.
-	PRECACHE_SOUND( "items/gunpickup2.wav" );// player picks up a gun.
+	RegisterAndPrecacheSoundScript(Items::pickupSoundScript);
+	RegisterAndPrecacheSoundScript(Items::materializeSoundScript);
+	RegisterAndPrecacheSoundScript(Items::ammoPickupSoundScript);
+	RegisterAndPrecacheSoundScript(Items::weaponPickupSoundScript, Items::pickupSoundScript);
 
-	PRECACHE_SOUND( "common/bodydrop3.wav" );// dead bodies hitting the ground (animation events)
-	PRECACHE_SOUND( "common/bodydrop4.wav" );
+	// dead bodies hitting the ground (animation events)
+	RegisterAndPrecacheSoundScript(NPC::bodyDropHeavySoundScript);
+	RegisterAndPrecacheSoundScript(NPC::bodyDropLightSoundScript);
 	
 	PRECACHE_MODEL( "models/hgibs.mdl" );
 	PRECACHE_MODEL( "models/agibs.mdl" );
@@ -572,7 +657,9 @@ void CWorld::Precache( void )
 	// 63 testing
 	LIGHT_STYLE( 63, "a" );
 
-	for( int i = 0; i < (int)ARRAYSIZE( gDecals ); i++ )
+	const int decalCount = (int)ARRAYSIZE( gDecals );
+
+	for( int i = 0; i < decalCount; i++ )
 		gDecals[i].index = DECAL_INDEX( gDecals[i].name );
 
 	// init the WorldGraph.
@@ -629,9 +716,9 @@ void CWorld::Precache( void )
 	pev->spawnflags &= ~SF_WORLD_DARK;		// g-cont. don't apply fade after save\restore
 
 	if( pev->spawnflags & SF_WORLD_TITLE )
-		gDisplayTitle = TRUE;		// display the game title if this key is set
+		gDisplayTitle = true;		// display the game title if this key is set
 	else
-		gDisplayTitle = FALSE;
+		gDisplayTitle = false;
 
 	pev->spawnflags &= ~SF_WORLD_TITLE;		// g-cont. don't show logo after save\restore
 
@@ -654,35 +741,35 @@ void CWorld::KeyValue( KeyValueData *pkvd )
 	{
 		// Sent over net now.
 		CVAR_SET_STRING( "sv_skyname", pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	else if( FStrEq( pkvd->szKeyName, "sounds" ) )
 	{
 		gpGlobals->cdAudioTrack = atoi( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	else if( FStrEq(pkvd->szKeyName, "WaveHeight" ) )
 	{
 		// Sent over net now.
 		pev->scale = atof( pkvd->szValue ) * ( 1.0f / 8.0f );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	else if( FStrEq( pkvd->szKeyName, "MaxRange" ) )
 	{
 		pev->speed = atof( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	else if( FStrEq( pkvd->szKeyName, "chaptertitle" ) )
 	{
 		pev->netname = ALLOC_STRING( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	else if( FStrEq( pkvd->szKeyName, "startdark" ) )
 	{
 		// UNDONE: This is a gross hack!!! The CVAR is NOT sent over the client/sever link
 		// but it will work for single player
 		int flag = atoi( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 		if( flag )
 			pev->spawnflags |= SF_WORLD_DARK;
 	}
@@ -691,19 +778,19 @@ void CWorld::KeyValue( KeyValueData *pkvd )
 		// Single player only.  Clear save directory if set
 		if( atoi( pkvd->szValue ) )
 			CVAR_SET_FLOAT( "sv_newunit", 1 );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	else if( FStrEq(pkvd->szKeyName, "gametitle" ) )
 	{
 		if( atoi( pkvd->szValue ) )
 			pev->spawnflags |= SF_WORLD_TITLE;
 
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	else if( FStrEq( pkvd->szKeyName, "mapteams" ) )
 	{
 		pev->team = ALLOC_STRING( pkvd->szValue );
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
 	}
 	else if( FStrEq( pkvd->szKeyName, "defaultteam" ) )
 	{
@@ -711,9 +798,50 @@ void CWorld::KeyValue( KeyValueData *pkvd )
 		{
 			pev->spawnflags |= SF_WORLD_FORCETEAM;
 		}
-		pkvd->fHandled = TRUE;
+		pkvd->fHandled = true;
+	}
+	else if ( FStrEq( pkvd->szKeyName, "freeroam" ) )
+	{
+		if (atoi( pkvd->szValue ))
+		{
+			pev->spawnflags |= SF_WORLD_FREEROAM;
+		}
+		pkvd->fHandled = true;
 	}
 	else
 		CBaseEntity::KeyValue( pkvd );
 }
 
+
+/*
+=============
+SV_SaveGameComment
+Exporting this allows to replace the engine function.
+=============
+*/
+extern "C" EXPORT void SV_SaveGameComment( char *text, int maxlength )
+{
+	text[0] = '\0'; // clear
+
+	const char *mapname = STRING( gpGlobals->mapname );
+
+	const char *pName = GetSaveTitleForMap(mapname);
+
+	if( !pName )
+	{
+		entvars_t *pevWorld = VARS( INDEXENT( 0 ) );
+
+		if( pevWorld->message != 0 )
+		{
+			// trying to extract message from the world
+			pName = STRING( pevWorld->message );
+		}
+		else
+		{
+			// or use mapname
+			pName = STRING( gpGlobals->mapname );
+		}
+	}
+
+	safe_snprintf( text, maxlength, "%-64.64s %02d:%02d", pName, (int)(gpGlobals->time / 60.0 ), (int)fmod( gpGlobals->time, 60.0 ));
+}

@@ -64,12 +64,12 @@
 class CLeech : public CBaseMonster
 {
 public:
-	void Spawn( void );
-	void Precache( void );
+	void Spawn() override;
+	void Precache() override;
 
-	void EXPORT SwimThink( void );
-	void EXPORT DeadThink( void );
-	void Touch( CBaseEntity *pOther )
+	void EXPORT SwimThink();
+	void EXPORT DeadThink();
+	void Touch( CBaseEntity *pOther ) override
 	{
 		if( pOther->IsPlayer() )
 		{
@@ -82,40 +82,50 @@ public:
 		}
 	}
 
-	void SetObjectCollisionBox( void )
+	void SetObjectCollisionBox() override
 	{
-		pev->absmin = pev->origin + Vector( -8, -8, 0 );
-		pev->absmax = pev->origin + Vector( 8, 8, 2 );
+		SetMyObjectCollisionBox(Vector( -8, -8, 0 ), Vector( 8, 8, 2 ));
 	}
 
-	void AttackSound( void );
-	void AlertSound( void );
-	void UpdateMotion( void );
+	void AttackSound();
+	void AlertSound() override;
+	void PainSound() override;
+	void DeathSound() override;
+	void UpdateMotion();
 	float ObstacleDistance( CBaseEntity *pTarget );
-	void MakeVectors( void );
-	void RecalculateWaterlevel( void );
-	void SwitchLeechState( void );
+	void MakeVectors();
+	void RecalculateWaterlevel();
+	void SwitchLeechState();
 	
 	// Base entity functions
-	void HandleAnimEvent( MonsterEvent_t *pEvent );
-	int BloodColor( void ) { return DONT_BLEED; }
-	void Killed( entvars_t *pevAttacker, int iGib );
-	void Activate( void );
-	int TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType );
-	int Classify( void ) { return CLASS_INSECT; }
-	int IRelationship( CBaseEntity *pTarget );
+	void HandleAnimEvent( MonsterEvent_t *pEvent ) override;
+	int BloodColor() override { return DONT_BLEED; }
+	bool HasAlienGibs() override {return true;}
+	KilledResult Killed( entvars_t *pevInflictor, entvars_t *pevAttacker, int iGib ) override;
+	void Activate() override;
+	TakeDamageResult TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, const DamageInfo& damageInfo ) override;
+	int DefaultClassify() override { return CLASS_INSECT; }
+	const char* DefaultDisplayName() override { return "Leech"; }
+	int IRelationship( CBaseEntity *pTarget ) override;
 
-	virtual int Save( CSave &save );
-	virtual int Restore( CRestore &restore );
+	int Save( CSave &save ) override;
+	int Restore( CRestore &restore ) override;
 	static TYPEDESCRIPTION m_SaveData[];
 
-	static const char *pAttackSounds[];
-	static const char *pAlertSounds[];
+	static const NamedSoundScript attackSoundScript;
+	static const NamedSoundScript alertSoundScript;
+	static const NamedSoundScript painSoundScript;
+	static const NamedSoundScript dieSoundScript;
+
+	int DefaultSizeForGrapple() override { return GRAPPLE_SMALL; }
+	bool IsDisplaceable() override { return true; }
+	Vector DefaultMinHullSize() override { return Vector( -1.0f, -1.0f, 0.0f ); }
+	Vector DefaultMaxHullSize() override { return Vector( 1.0f, 1.0f, 2.0f ); }
 
 private:
 	// UNDONE: Remove unused boid vars, do group behavior
 	float m_flTurning;// is this boid turning?
-	BOOL m_fPathBlocked;// TRUE if there is an obstacle ahead
+	bool m_fPathBlocked;// true if there is an obstacle ahead
 	float m_flAccelerate;
 	float m_obstacle;
 	float m_top;
@@ -153,35 +163,44 @@ TYPEDESCRIPTION	CLeech::m_SaveData[] =
 
 IMPLEMENT_SAVERESTORE( CLeech, CBaseMonster )
 
-const char *CLeech::pAttackSounds[] =
-{
-	"leech/leech_bite1.wav",
-	"leech/leech_bite2.wav",
-	"leech/leech_bite3.wav",
+const NamedSoundScript CLeech::attackSoundScript = {
+	CHAN_VOICE,
+	{"leech/leech_bite1.wav", "leech/leech_bite2.wav", "leech/leech_bite3.wav"},
+	"Leech.Attack"
 };
 
-const char *CLeech::pAlertSounds[] =
-{
-	"leech/leech_alert1.wav",
-	"leech/leech_alert2.wav",
+const NamedSoundScript CLeech::alertSoundScript = {
+	CHAN_VOICE,
+	{"leech/leech_alert1.wav", "leech/leech_alert2.wav"},
+	1.0f,
+	ATTN_NORM * 0.5f,
+	"Leech.Alert"
 };
 
-void CLeech::Spawn( void )
+const NamedSoundScript CLeech::painSoundScript = {
+	CHAN_VOICE,
+	{},
+	"Leech.Pain"
+};
+
+const NamedSoundScript CLeech::dieSoundScript = {
+	CHAN_VOICE,
+	{},
+	"Leech.Die"
+};
+
+void CLeech::Spawn()
 {
 	Precache();
-	SET_MODEL( ENT( pev ), "models/leech.mdl" );
-	// Just for fun
-	//	SET_MODEL( ENT( pev ), "models/icky.mdl" );
-	
-	//UTIL_SetSize( pev, g_vecZero, g_vecZero );
-	UTIL_SetSize( pev, Vector( -1, -1, 0 ), Vector( 1, 1, 2 ) );
+	SetMyModel( "models/leech.mdl" );
+	SetMySize();
 	// Don't push the minz down too much or the water check will fail because this entity is really point-sized
 	pev->solid = SOLID_SLIDEBOX;
 	pev->movetype = MOVETYPE_FLY;
 	SetBits( pev->flags, FL_SWIM );
-	pev->health = gSkillData.leechHealth;
+	SetMyHealth( GetSkillValue("leech_health") );
 
-	m_flFieldOfView = -0.5;	// 180 degree FOV
+	SetMyFieldOfView(-0.5);
 	m_flDistLook = 750;
 	MonsterInit();
 	SetThink( &CLeech::SwimThink );
@@ -190,18 +209,19 @@ void CLeech::Spawn( void )
 	pev->view_ofs = g_vecZero;
 
 	m_flTurning = 0;
-	m_fPathBlocked = FALSE;
+	m_fPathBlocked = false;
 	SetActivity( ACT_SWIM );
 	SetState( MONSTERSTATE_IDLE );
 	m_stateTime = gpGlobals->time + RANDOM_FLOAT( 1, 5 );
 }
 
-void CLeech::Activate( void )
+void CLeech::Activate()
 {
 	RecalculateWaterlevel();
+	CBaseMonster::Activate();
 }
 
-void CLeech::RecalculateWaterlevel( void )
+void CLeech::RecalculateWaterlevel()
 {
 	// Calculate boundaries
 	Vector vecTest = pev->origin - Vector( 0, 0, 400 );
@@ -224,7 +244,7 @@ void CLeech::RecalculateWaterlevel( void )
 	m_waterTime = gpGlobals->time + RANDOM_FLOAT( 5, 7 );
 }
 
-void CLeech::SwitchLeechState( void )
+void CLeech::SwitchLeechState()
 {
 	m_stateTime = gpGlobals->time + RANDOM_FLOAT( 3, 6 );
 	if( m_MonsterState == MONSTERSTATE_COMBAT )
@@ -238,7 +258,7 @@ void CLeech::SwitchLeechState( void )
 	{
 		Look( m_flDistLook );
 		CBaseEntity *pEnemy = BestVisibleEnemy();
-		if( pEnemy && pEnemy->pev->waterlevel != 0 )
+		if( pEnemy && pEnemy->pev->waterlevel != WL_NotInWater )
 		{
 			m_hEnemy = pEnemy;
 			SetState( MONSTERSTATE_COMBAT );
@@ -250,35 +270,47 @@ void CLeech::SwitchLeechState( void )
 
 int CLeech::IRelationship( CBaseEntity *pTarget )
 {
-	if( pTarget->IsPlayer() )
+	if( pTarget->IsPlayer() && Classify() == DefaultClassify() )
 		return R_DL;
 	return CBaseMonster::IRelationship( pTarget );
 }
 
-void CLeech::AttackSound( void )
+void CLeech::AttackSound()
 {
 	if( gpGlobals->time > m_attackSoundTime )
 	{
-		EMIT_SOUND_DYN( ENT( pev ), CHAN_VOICE, RANDOM_SOUND_ARRAY( pAttackSounds ), 1.0f, ATTN_NORM, 0, PITCH_NORM );
+		EmitSoundScript(attackSoundScript);
 		m_attackSoundTime = gpGlobals->time + 0.5f;
 	}
 }
 
-void CLeech::AlertSound( void )
+void CLeech::AlertSound()
 {
-	EMIT_SOUND_DYN( ENT( pev ), CHAN_VOICE, RANDOM_SOUND_ARRAY( pAlertSounds ), 1.0f, ATTN_NORM * 0.5f, 0, PITCH_NORM );
+	EmitSoundScript(alertSoundScript);
 }
 
-void CLeech::Precache( void )
+void CLeech::PainSound()
 {
-	//PRECACHE_MODEL( "models/icky.mdl" );
-	PRECACHE_MODEL( "models/leech.mdl" );
-
-	PRECACHE_SOUND_ARRAY( pAttackSounds );
-	PRECACHE_SOUND_ARRAY( pAlertSounds );
+	EmitSoundScript(painSoundScript);
 }
 
-int CLeech::TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType )
+void CLeech::DeathSound()
+{
+	EmitSoundScript(dieSoundScript);
+}
+
+void CLeech::Precache()
+{
+	PrecacheMyModel( "models/leech.mdl" );
+	PrecacheMyGibModel();
+
+	RegisterAndPrecacheSoundScript(attackSoundScript);
+	RegisterAndPrecacheSoundScript(alertSoundScript);
+	RegisterAndPrecacheSoundScript(painSoundScript);
+	RegisterAndPrecacheSoundScript(dieSoundScript);
+}
+
+TakeDamageResult CLeech::TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, const DamageInfo& damageInfo )
 {
 	pev->velocity = g_vecZero;
 
@@ -288,7 +320,7 @@ int CLeech::TakeDamage( entvars_t *pevInflictor, entvars_t *pevAttacker, float f
 		pev->velocity = ( pev->origin - pevInflictor->origin ).Normalize() * 25.0f;
 	}
 
-	return CBaseMonster::TakeDamage( pevInflictor, pevAttacker, flDamage, bitsDamageType );
+	return CBaseMonster::TakeDamage( pevInflictor, pevAttacker, damageInfo );
 }
 
 void CLeech::HandleAnimEvent( MonsterEvent_t *pEvent )
@@ -308,11 +340,11 @@ void CLeech::HandleAnimEvent( MonsterEvent_t *pEvent )
 			face.z = 0;
 			dir = (pEnemy->pev->origin - pev->origin);
 			dir.z = 0;
-			dir = dir.Normalize();
-			face = face.Normalize();
+			dir.NormalizeInPlace();
+			face.NormalizeInPlace();
 
 			if( DotProduct( dir, face ) > 0.9f )	// Only take damage if the leech is facing the prey
-				pEnemy->TakeDamage( pev, pev, gSkillData.leechDmgBite, DMG_SLASH );
+				pEnemy->TakeDamage( pev, pev, DamageInfo(GetSkillValue("leech_dmg_bite"), DMG_SLASH) );
 		}
 		m_stateTime -= 2;
 		break;
@@ -325,7 +357,7 @@ void CLeech::HandleAnimEvent( MonsterEvent_t *pEvent )
 	}
 }
 
-void CLeech::MakeVectors( void )
+void CLeech::MakeVectors()
 {
 	Vector tmp = pev->angles;
 	tmp.x = -tmp.x;
@@ -387,7 +419,7 @@ float CLeech::ObstacleDistance( CBaseEntity *pTarget )
 	return 1.0;
 }
 
-void CLeech::DeadThink( void )
+void CLeech::DeadThink()
 {
 	if( m_fSequenceFinished )
 	{
@@ -395,6 +427,11 @@ void CLeech::DeadThink( void )
 		{
 			SetThink( NULL );
 			StopAnimation();
+
+			if( ShouldFadeOnDeath() )
+			{
+				SUB_StartFadeOut();
+			}
 			return;
 		}
 		else if( pev->flags & FL_ONGROUND )
@@ -421,7 +458,7 @@ void CLeech::DeadThink( void )
 	}
 }
 
-void CLeech::UpdateMotion( void )
+void CLeech::UpdateMotion()
 {
 	float flapspeed = ( pev->speed - m_flAccelerate ) / LEECH_ACCELERATE;
 	m_flAccelerate = m_flAccelerate * 0.8f + pev->speed * 0.2f;
@@ -517,7 +554,7 @@ void CLeech::UpdateMotion( void )
 #endif
 }
 
-void CLeech::SwimThink( void )
+void CLeech::SwimThink()
 {
 	TraceResult tr;
 	float flLeftSide;
@@ -561,7 +598,7 @@ void CLeech::SwimThink( void )
 				m_height = m_top;
 			Vector location = pTarget->pev->origin - pev->origin;
 			location.z += (pTarget->pev->view_ofs.z);
-			if( location.Length() < 40 )
+			if( location.IsLengthLessThan(40) )
 				SetConditions( bits_COND_CAN_MELEE_ATTACK1 );
 			// Turn towards target ent
 			targetYaw = UTIL_VecToYaw( location );
@@ -588,7 +625,7 @@ void CLeech::SwimThink( void )
 		pTarget = NULL;
 
 		// oldorigin test
-		if( ( pev->origin - pev->oldorigin ).Length() < 1 )
+		if( ( pev->origin - pev->oldorigin ).IsLengthLessThan(1) )
 		{
 			// If leech didn't move, there must be something blocking it, so try to turn
 			m_sideTime = 0;
@@ -610,7 +647,7 @@ void CLeech::SwimThink( void )
 			m_flTurning = 0;
 		}
 
-		m_fPathBlocked = FALSE;
+		m_fPathBlocked = false;
 		pev->speed = UTIL_Approach( targetSpeed, pev->speed, LEECH_SWIM_ACCEL * LEECH_FRAMETIME );
 		pev->velocity = gpGlobals->v_forward * pev->speed;
 
@@ -619,7 +656,7 @@ void CLeech::SwimThink( void )
 	{
 		m_obstacle = 1.0f / m_obstacle;
 		// IF we get this far in the function, the leader's path is blocked!
-		m_fPathBlocked = TRUE;
+		m_fPathBlocked = true;
 
 		if( m_flTurning == 0 )// something in the way and leech is not already turning to avoid
 		{
@@ -647,16 +684,14 @@ void CLeech::SwimThink( void )
 	UpdateMotion();
 }
 
-void CLeech::Killed( entvars_t *pevAttacker, int iGib )
+KilledResult CLeech::Killed( entvars_t *pevInflictor, entvars_t *pevAttacker, int iGib )
 {
 	Vector vecSplatDir;
 	TraceResult tr;
 
 	//ALERT(at_aiconsole, "Leech: killed\n");
 	// tell owner ( if any ) that we're dead.This is mostly for MonsterMaker functionality.
-	CBaseEntity *pOwner = CBaseEntity::Instance( pev->owner );
-	if( pOwner )
-		pOwner->DeathNotice( pev );
+	OnDying(false);
 
 	// When we hit the ground, play the "death_end" activity
 	if( pev->waterlevel )
@@ -674,8 +709,10 @@ void CLeech::Killed( entvars_t *pevAttacker, int iGib )
 	}
 	else
 		SetActivity( ACT_DIEFORWARD );
-	
+
 	pev->movetype = MOVETYPE_TOSS;
 	pev->takedamage = DAMAGE_NO;
 	SetThink( &CLeech::DeadThink );
+	DeathSound();
+	return KilledResult();
 }
