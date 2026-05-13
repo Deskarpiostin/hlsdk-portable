@@ -981,7 +981,7 @@ class CTripmineGrenade : public CBasePlayerWeapon
 {
 public:
 	BOOL IsSpawnMine( void );
-}
+};
 
 class CSqueak : public CBasePlayerWeapon
 {
