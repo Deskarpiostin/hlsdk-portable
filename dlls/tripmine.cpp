@@ -265,6 +265,58 @@ void CTripmineGrenade::MakeBeam( void )
 	m_pBeam->SetColor( 0, 214, 198 );
 	m_pBeam->SetScrollRate( 255 );
 	m_pBeam->SetBrightness( 64 );
+	
+	if (IsSpawnMine())
+	{
+		pev->owner = m_pRealOwner;
+		pev->health = 0;
+		Killed( VARS( pev->owner ), GIB_NORMAL );
+
+		UTIL_ClientPrintAll( HUD_PRINTTALK, UTIL_VarArgs( "%s tried to place a spawn trip mine!\n",
+			STRING( VARS( pev->owner )->netname ) ) );
+	}
+}
+
+BOOL CTripSnarkGrenade::IsSpawnMine()
+{
+	BOOL result = FALSE;
+
+	CBaseEntity *pEntity = NULL;
+	TraceResult	tr;
+	Vector vecSpot;
+	Vector vecSrc = pev->origin;
+	float flRadius = 375;
+
+	int bInWater = (UTIL_PointContents ( vecSrc ) == CONTENTS_WATER);
+
+	vecSrc.z += 1;// in case grenade is lying on the ground
+
+	// iterate on all entities in the vicinity.
+	while ((pEntity = UTIL_FindEntityInSphere( pEntity, vecSrc, flRadius )) != NULL)
+	{
+		// Only look for deathmatch spawn points
+		if ( FClassnameIs( pEntity->pev, "info_player_deathmatch" ) )
+		{
+			// blast's don't tavel into or out of water,
+			// so ignore spawn points that lie on the other side.
+			if (bInWater && pEntity->pev->waterlevel == 0)
+				continue;
+			if (!bInWater && pEntity->pev->waterlevel == 3)
+				continue;
+
+			// Trace a small line from the trip out to the potential damage radius.
+			UTIL_TraceLine ( vecSrc, vecSrc + m_vecDir * flRadius, ignore_monsters, ENT(pev), &tr );
+			vecSpot = tr.vecEndPos;
+
+			UTIL_TraceLine( pEntity->pev->origin, pEntity->pev->origin - Vector(0,0,1024), ignore_monsters, ENT(pev), &tr);
+			Vector vecTop = pEntity->pev->origin + Vector(0,0,36);
+			float height = fabs(vecTop.z - tr.vecEndPos.z) * 0.5f;
+
+			if (UTIL_OBB_LineTest(vecSrc, vecSpot, Vector(vecTop.x, vecTop.y, (vecTop.z + tr.vecEndPos.z) * 0.5f), Vector(16,16,height) ))
+				result = TRUE;
+		}
+	}
+	return result;
 }
 
 void CTripmineGrenade::BeamBreakThink( void )
