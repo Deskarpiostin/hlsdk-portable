@@ -277,7 +277,7 @@ void CTripmineGrenade::MakeBeam( void )
 	}
 }
 
-BOOL CTripSnarkGrenade::IsSpawnMine()
+BOOL CTripmineGrenade::IsSpawnMine()
 {
 	BOOL result = FALSE;
 
