@@ -39,8 +39,6 @@
 #define	TRIPMINE_PRIMARY_VOLUME		450
 #define	TRIPSNARK_FLARE			"sprites/xspark3.spr"
 
-extern cvar_t bm_spawnmines;
-
 enum tripmine_e {
 	TRIPMINE_IDLE1 = 0,
 	TRIPMINE_IDLE2,
@@ -442,9 +440,6 @@ void CTripSnarkGrenade::DelayDeathThink( void )
 
 BOOL CTripSnarkGrenade::IsSpawnMine()
 {
-	if (bm_spawnmines.value)
-		return FALSE;
-
 	BOOL result = FALSE;
 
 	CBaseEntity *pEntity = NULL;
