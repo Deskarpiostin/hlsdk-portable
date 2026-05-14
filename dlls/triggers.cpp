@@ -2330,7 +2330,7 @@ void CChangeLevel::Precache()
 		{
 			if (FStrEq(st_szPrevMap, m_szMapName))
 			{
-				ALERT(at_aiconsole, "Next map is the same as previous\n");
+				ALERT(at_debug, "Next map is the same as previous\n");
 				pev->solid = SOLID_BSP;
 			}
 		}
@@ -2393,13 +2393,41 @@ void CChangeLevel::ChangeLevelNow( CBaseEntity *pActivator, CBaseEntity *pCaller
 	{
 		CBaseEntity *pPlayer = g_pGameRules->EffectivePlayer(pActivator);
 		if (!pPlayer)
-    		pPlayer = g_pGameRules->EffectivePlayer(pCaller);
-		
-		if (!pPlayer && g_pGameRules->IsCoOp() && mp_coop.value != 0) {
-    // loop to find player, sets pPlayer
+			pPlayer = g_pGameRules->EffectivePlayer(pCaller);
+
+		if (!pPlayer && g_pGameRules->IsCoOp() && mp_coop.value != 0)
+		{
+			for (int i = 1; i <= gpGlobals->maxClients; ++i)
+			{
+				CBaseEntity* pEntity = UTIL_PlayerByIndex(i);
+				if (pEntity && pEntity->IsPlayer())
+				{
+					pPlayer = pEntity;
+					break;
+				}
+			}
 		}
-		ALERT( at_aiconsole, "Co-op changelevel blocked until %.0f seconds after map start\n", COOP_CHANGELEVEL_MIN_MAP_TIME );
-		UTIL_SayText( "Wait 15 seconds before doing level transition.", pPlayer );
+
+		hudtextparms_t textParms = {};
+		textParms.x = -1;
+		textParms.y = 0.35f;
+		textParms.effect = 0;
+		textParms.r1 = 255;
+		textParms.g1 = 180;
+		textParms.b1 = 64;
+		textParms.a1 = 255;
+		textParms.r2 = 255;
+		textParms.g2 = 255;
+		textParms.b2 = 255;
+		textParms.a2 = 255;
+		textParms.fadeinTime = 0.1f;
+		textParms.fadeoutTime = 0.25f;
+		textParms.holdTime = 2.5f;
+		textParms.fxTime = 0.0f;
+		textParms.channel = 3;
+
+		ALERT( at_console, "Co-op changelevel blocked until %.0f seconds after map start\n", COOP_CHANGELEVEL_MIN_MAP_TIME );
+		UTIL_HudMessage( pPlayer, textParms, "Wait 15 seconds before doing level transition." );
 		return;
 	}
 
@@ -2426,12 +2454,12 @@ void CChangeLevel::ChangeLevelNow( CBaseEntity *pActivator, CBaseEntity *pCaller
 	}
 	if (!pPlayer)
 	{
-		ALERT(at_aiconsole, "Could not find a player for changelevel (no valid activator/caller), transition not allowed\n");
+		ALERT(at_debug, "Could not find a player for changelevel (no valid activator/caller), transition not allowed\n");
 		return;
 	}
 	if (!pPlayer->IsAlive() && !g_pGameRules->IsMultiplayer())
 	{
-		ALERT(at_aiconsole, "The player who activated the changelevel has died, transition not allowed\n");
+		ALERT(at_debug, "The player who activated the changelevel has died, transition not allowed\n");
 		return;
 	}
 
@@ -2439,7 +2467,7 @@ void CChangeLevel::ChangeLevelNow( CBaseEntity *pActivator, CBaseEntity *pCaller
 	{
 		if( !InTransitionVolume( pPlayer, m_szLandmarkName ) )
 		{
-			ALERT( at_aiconsole, "Player isn't in the transition volume %s, aborting\n", m_szLandmarkName );
+			ALERT( at_debug, "Player isn't in the transition volume %s, aborting\n", m_szLandmarkName );
 			return;
 		}
 	}
@@ -3846,7 +3874,7 @@ void CTriggerChangeValue::ApplySourceValue(CBaseEntity* pTarget, const char* sou
 		DispatchKeyValue(pTarget->edict(), &mypkvd);
 		if (FStrEq(mypkvd.szKeyName, "solid"))
 			UTIL_SetOrigin(pTarget->pev, pTarget->pev->origin);
-		ALERT(at_aiconsole, "'%s' (%s): dispatched value '%s' to key '%s' of entity '%s'\n", GetTargetname(), STRING(pev->classname), newValue, keyName, STRING(pTarget->pev->classname));
+		ALERT(at_debug, "'%s' (%s): dispatched value '%s' to key '%s' of entity '%s'\n", GetTargetname(), STRING(pev->classname), newValue, keyName, STRING(pTarget->pev->classname));
 	}
 		break;
 	case TCV_ERROR_DIV_BY_ZERO:
@@ -4229,12 +4257,12 @@ void CTriggerCondition::Evaluate()
 
 		if (result && pev->netname) {
 			if (DeveloperModeLevel() >= 4)
-				ALERT(at_aiconsole, "'%s' (%s): Firing TRUE target %s\n", GetTargetname(), STRING(pev->classname), STRING(pev->netname));
+				ALERT(at_debug, "'%s' (%s): Firing TRUE target %s\n", GetTargetname(), STRING(pev->classname), STRING(pev->netname));
 			FireTargets(STRING(pev->netname), m_hActivator, this);
 		}
 		else if (!result && pev->message) {
 			if (DeveloperModeLevel() >= 4)
-				ALERT(at_aiconsole, "'%s' (%s): Firing FALSE target %s\n", GetTargetname(), STRING(pev->classname), STRING(pev->message));
+				ALERT(at_debug, "'%s' (%s): Firing FALSE target %s\n", GetTargetname(), STRING(pev->classname), STRING(pev->message));
 			FireTargets(STRING(pev->message), m_hActivator, this);
 		}
 
