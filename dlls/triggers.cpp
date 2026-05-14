@@ -2391,6 +2391,13 @@ void CChangeLevel::ChangeLevelNow( CBaseEntity *pActivator, CBaseEntity *pCaller
 
 	if( mp_coop.value == 1 && gpGlobals->time < COOP_CHANGELEVEL_MIN_MAP_TIME )
 	{
+		CBaseEntity *pPlayer = g_pGameRules->EffectivePlayer(pActivator);
+		if (!pPlayer)
+    		pPlayer = g_pGameRules->EffectivePlayer(pCaller);
+		
+		if (!pPlayer && g_pGameRules->IsCoOp() && mp_coop.value != 0) {
+    // loop to find player, sets pPlayer
+		}
 		ALERT( at_aiconsole, "Co-op changelevel blocked until %.0f seconds after map start\n", COOP_CHANGELEVEL_MIN_MAP_TIME );
 		UTIL_SayText( "Wait 15 seconds before doing level transition.", pPlayer );
 		return;
