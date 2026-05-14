@@ -2392,7 +2392,7 @@ void CChangeLevel::ChangeLevelNow( CBaseEntity *pActivator, CBaseEntity *pCaller
 	if( mp_coop.value == 1 && gpGlobals->time < COOP_CHANGELEVEL_MIN_MAP_TIME )
 	{
 		ALERT( at_aiconsole, "Co-op changelevel blocked until %.0f seconds after map start\n", COOP_CHANGELEVEL_MIN_MAP_TIME );
-		UTIL_SayText( "Wait 15 seconds before doing level transition." )
+		UTIL_SayText( "Wait 15 seconds before doing level transition.", CBasePlayer )
 		return;
 	}
 
