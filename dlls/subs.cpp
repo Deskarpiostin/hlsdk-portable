@@ -135,7 +135,7 @@ void CBaseEntity::SUB_Remove()
 		// this situation can screw up monsters who can't tell their entity pointers are invalid.
 		pev->health = 0;
 		// This message is useless as it's fine to remove entity with positive amount of health.
-		//ALERT( at_aiconsole, "SUB_Remove called on entity with health > 0\n" );
+		//ALERT( at_debug, "SUB_Remove called on entity with health > 0\n" );
 	}
 
 	REMOVE_ENTITY( ENT( pev ) );
@@ -236,9 +236,9 @@ void FireTargets(const char *targetName, CBaseEntity *pActivator, CBaseEntity *p
 		if( pTarget && !( pTarget->pev->flags & FL_KILLME ) && (!FilterEntities || FilterEntities(pTarget, pActivator, pCaller, useType, value)))	// Don't use dying ents
 		{
 			if (useType == USE_SET)
-				ALERT(at_aiconsole, "Firing: %s (%s, %s, value is %g, called by '%s', activated by '%s')\n", STRING(pTarget->pev->classname), targetName, useTypeString, value, callerClassname, activatorClassname);
+				ALERT(at_debug, "Firing: %s (%s, %s, value is %g, called by '%s', activated by '%s')\n", STRING(pTarget->pev->classname), targetName, useTypeString, value, callerClassname, activatorClassname);
 			else
-				ALERT(at_aiconsole, "Firing: %s (%s, %s, called by '%s', activated by '%s')\n", STRING(pTarget->pev->classname), targetName, useTypeString, callerClassname, activatorClassname);
+				ALERT(at_debug, "Firing: %s (%s, %s, called by '%s', activated by '%s')\n", STRING(pTarget->pev->classname), targetName, useTypeString, callerClassname, activatorClassname);
 			fired = true;
 			pTarget->Use( pActivator, pCaller, useType, value );
 		}
@@ -246,9 +246,9 @@ void FireTargets(const char *targetName, CBaseEntity *pActivator, CBaseEntity *p
 	if (!fired)
 	{
 		if (useType == USE_SET)
-			ALERT(at_aiconsole, "Missing fire: (%s, %s, value is %g, caller is '%s', activator is '%s')\n", targetName, useTypeString, value, callerClassname, activatorClassname);
+			ALERT(at_debug, "Missing fire: (%s, %s, value is %g, caller is '%s', activator is '%s')\n", targetName, useTypeString, value, callerClassname, activatorClassname);
 		else
-			ALERT(at_aiconsole, "Missing fire: (%s, %s, caller is '%s', activator is '%s')\n", targetName, useTypeString, callerClassname, activatorClassname);
+			ALERT(at_debug, "Missing fire: (%s, %s, caller is '%s', activator is '%s')\n", targetName, useTypeString, callerClassname, activatorClassname);
 	}
 }
 
@@ -261,7 +261,7 @@ void KillTargets(const char* targetName)
 	{
 		UTIL_Remove( CBaseEntity::Instance( pentKillTarget ) );
 
-		ALERT( at_aiconsole, "killing %s (%s)\n", STRING( pentKillTarget->v.classname ), targetName );
+		ALERT( at_debug, "killing %s (%s)\n", STRING( pentKillTarget->v.classname ), targetName );
 		pentKillTarget = FIND_ENTITY_BY_TARGETNAME( pentKillTarget, targetName );
 	}
 }
@@ -305,7 +305,7 @@ void CBaseDelay::DelayedUse(float delay, CBaseEntity *pActivator, CBaseEntity *p
 	//
 	if( killTarget )
 	{
-		ALERT( at_aiconsole, "KillTarget: %s\n", STRING( killTarget ) );
+		ALERT( at_debug, "KillTarget: %s\n", STRING( killTarget ) );
 		KillTargets(STRING( killTarget ));
 	}
 

@@ -160,7 +160,7 @@ Vector VecCheckToss( entvars_t *pev, const Vector &vecSpot1, const Vector& vecSp
 		// fail!
 		if (rightFactor != 0.0f || forwardFactor != 0.0f)
 		{
-			//ALERT(at_aiconsole, "VecCheckToss: re-checking the end spot with no random deviation\n");
+			//ALERT(at_debug, "VecCheckToss: re-checking the end spot with no random deviation\n");
 			return VecCheckToss(pev, vecSpot1, vecSpot2, flGravityAdj, 0.0f);
 		}
 

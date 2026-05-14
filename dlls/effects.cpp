@@ -1869,7 +1869,7 @@ CBaseEntity *CGibShooter::CreateGib(const Vector& vecPos, const Vector& vecVel, 
 
 	if( pev->body <= 1 )
 	{
-		ALERT( at_aiconsole, "GibShooter Body is <= 1!\n" );
+		ALERT( at_debug, "GibShooter Body is <= 1!\n" );
 	}
 
 	pGib->pev->body = RANDOM_LONG( 1, pev->body - 1 );// avoid throwing random amounts of the 0th gib. (skull).

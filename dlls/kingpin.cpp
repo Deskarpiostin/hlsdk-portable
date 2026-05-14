@@ -1629,7 +1629,7 @@ void CKingpin::RunTask( Task_t *pTask )
 
 						if (m_canUseSecondChance && HasMemory( bits_MEMORY_GOING_TO_USE_SECOND_CHANCE ))
 						{
-							ALERT(at_aiconsole, "%s used second chance. Health: %f. Armor: %f\n", STRING(pev->classname), pev->health, pev->armorvalue);
+							ALERT(at_debug, "%s used second chance. Health: %f. Armor: %f\n", STRING(pev->classname), pev->health, pev->armorvalue);
 							m_canUseSecondChance = false;
 							pev->armorvalue = MaximumShield();
 						}

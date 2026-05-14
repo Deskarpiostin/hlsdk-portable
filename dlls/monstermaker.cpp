@@ -645,7 +645,7 @@ int CMonsterMaker::CalculateSpot(const Vector &testMinHullSize, const Vector &te
 		if (pBlocker)
 		{
 			const char* blockerName = FStringNull(pBlocker->pev->classname) ? "" : STRING(pBlocker->pev->classname);
-			ALERT(at_aiconsole, "Spawning of %s by %s '%s' is blocked by %s. Current live children: %d\n", STRING(m_iszMonsterClassname), STRING(pev->classname), STRING(pev->targetname), blockerName, m_cLiveChildren);
+			ALERT(at_debug, "Spawning of %s by %s '%s' is blocked by %s. Current live children: %d\n", STRING(m_iszMonsterClassname), STRING(pev->classname), STRING(pev->targetname), blockerName, m_cLiveChildren);
 
 			if (m_makeBlockerMoveAway)
 			{
@@ -1120,11 +1120,11 @@ void CMonsterMaker::DeathNotice( entvars_t *pevChild )
 	if (m_cLiveChildren > 0)
 	{
 		m_cLiveChildren--;
-		ALERT(at_aiconsole, "%s DeathNotice: %d live children left\n", STRING(pev->classname), m_cLiveChildren);
+		ALERT(at_debug, "%s DeathNotice: %d live children left\n", STRING(pev->classname), m_cLiveChildren);
 	}
 	else
 	{
-		ALERT(at_aiconsole, "Impossible situation: %s got DeathNotice from %s when live children count is 0!\n", STRING(pev->classname), STRING(pevChild->classname));
+		ALERT(at_debug, "Impossible situation: %s got DeathNotice from %s when live children count is 0!\n", STRING(pev->classname), STRING(pevChild->classname));
 	}
 
 	if( !m_fFadeChildren )

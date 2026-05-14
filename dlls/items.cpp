@@ -1210,7 +1210,7 @@ void CEyeScanner::SetActivity( Activity NewActivity )
 	}
 	else
 	{
-		ALERT( at_aiconsole, "%s has no sequence for act:%d\n", STRING( pev->classname ), NewActivity );
+		ALERT( at_debug, "%s has no sequence for act:%d\n", STRING( pev->classname ), NewActivity );
 		pev->sequence = 0;
 	}
 

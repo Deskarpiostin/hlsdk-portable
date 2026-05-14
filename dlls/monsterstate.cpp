@@ -34,7 +34,7 @@ void CBaseMonster::SetState( MONSTERSTATE State )
 /*
 	if( State != m_MonsterState )
 	{
-		ALERT( at_aiconsole, "State Changed to %d\n", State );
+		ALERT( at_debug, "State Changed to %d\n", State );
 	}
 */
 	switch( State )
@@ -44,7 +44,7 @@ void CBaseMonster::SetState( MONSTERSTATE State )
 	case MONSTERSTATE_IDLE:
 		if( m_hEnemy != 0 )
 		{
-			ALERT( at_aiconsole, "%s (in state %s): stripped enemy %s\n", STRING(pev->classname), MonsterStateDisplayString(m_MonsterState), STRING(m_hEnemy->pev->classname) );
+			ALERT( at_debug, "%s (in state %s): stripped enemy %s\n", STRING(pev->classname), MonsterStateDisplayString(m_MonsterState), STRING(m_hEnemy->pev->classname) );
 			m_hEnemy = NULL;// not allowed to have an enemy anymore.
 		}
 		break;
@@ -220,7 +220,7 @@ MONSTERSTATE CBaseMonster::GetIdealState()
 			{
 				m_IdealMonsterState = MONSTERSTATE_ALERT;
 				// pev->effects = EF_BRIGHTFIELD;
-				ALERT( at_aiconsole, "*** %s: Combat state with no enemy!\n", STRING(pev->classname) );
+				ALERT( at_debug, "*** %s: Combat state with no enemy!\n", STRING(pev->classname) );
 			}
 			break;
 		}

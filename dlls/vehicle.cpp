@@ -218,7 +218,7 @@ void CFuncVehicle::Blocked( CBaseEntity *pOther )
 	pevOther->velocity.z += 300;
 	pev->velocity = pev->velocity * 0.85f;
 
-	ALERT( at_aiconsole, "TRAIN(%s): Blocked by %s (dmg:%.2f)\n", STRING( pev->targetname ), STRING( pOther->pev->classname ), pev->dmg );
+	ALERT( at_debug, "TRAIN(%s): Blocked by %s (dmg:%.2f)\n", STRING( pev->targetname ), STRING( pOther->pev->classname ), pev->dmg );
 	UTIL_MakeVectors( pev->angles );
 
 	Vector forward, right, vOrigin;
@@ -786,7 +786,7 @@ void CFuncVehicle::Next()
 void CFuncVehicle::DeadEnd()
 {
 	CPathTrack *pTrack = m_ppath;
-	ALERT( at_aiconsole, "TRAIN(%s): Dead end ", STRING( pev->targetname ));
+	ALERT( at_debug, "TRAIN(%s): Dead end ", STRING( pev->targetname ));
 
 	if( pTrack != NULL )
 	{
@@ -825,7 +825,7 @@ void CFuncVehicle::DeadEnd()
 
 	if( pTrack != NULL )
 	{
-		ALERT( at_aiconsole, "at %s\n", STRING( pTrack->pev->targetname ));
+		ALERT( at_debug, "at %s\n", STRING( pTrack->pev->targetname ));
 
 		if( !FStringNull( pTrack->pev->netname ))
 		{
@@ -833,7 +833,7 @@ void CFuncVehicle::DeadEnd()
 		}
 	}
 	else
-		ALERT( at_aiconsole, "\n" );
+		ALERT( at_debug, "\n" );
 }
 
 void CFuncVehicle::SetControls(entvars_t *pevControls)
@@ -928,7 +928,7 @@ void CFuncVehicle::NearestPath()
 		return;
 	}
 
-	ALERT( at_aiconsole, "TRAIN: %s, Nearest track is %s\n", STRING( pev->targetname ), STRING( pNearest->pev->targetname ));
+	ALERT( at_debug, "TRAIN: %s, Nearest track is %s\n", STRING( pev->targetname ), STRING( pNearest->pev->targetname ));
 	pTrack = ( (CPathTrack *)pNearest )->GetNext();
 
 	if( pTrack != NULL )

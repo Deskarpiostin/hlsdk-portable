@@ -1,9 +1,9 @@
 /***
 *
 *	Copyright (c) 1996-2002, Valve LLC. All rights reserved.
-*	
-*	This product contains software technology licensed from Id 
-*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc. 
+*
+*	This product contains software technology licensed from Id
+*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc.
 *	All Rights Reserved.
 *
 *   This source code contains proprietary and confidential information of
@@ -201,7 +201,7 @@ const NamedVisual CController::energyBallLightVisual = BuildVisual("Controller.E
 		.Mixin(&CController::sharedBallLightVisual);
 
 //=========================================================
-// Classify - indicates this monster's place in the 
+// Classify - indicates this monster's place in the
 // relationship table.
 //=========================================================
 int CController::DefaultClassify()
@@ -399,7 +399,7 @@ void CController::Precache()
 
 	UTIL_PrecacheOther( "controller_energy_ball", GetProjectileOverrides() );
 	UTIL_PrecacheOther( "controller_head_ball", GetProjectileOverrides() );
-}	
+}
 
 void CController::ClearBalls()
 {
@@ -628,7 +628,7 @@ int CController::LookupFloat()
 }
 
 //=========================================================
-// RunTask 
+// RunTask
 //=========================================================
 void CController::RunTask( Task_t *pTask )
 {
@@ -738,7 +738,7 @@ void CController::RunTask( Task_t *pTask )
 			}
 		}
 		break;
-	default: 
+	default:
 		CSquadMonster::RunTask( pTask );
 		break;
 	}
@@ -892,8 +892,8 @@ void CController::RunAI()
 }
 
 void CController::Stop()
-{ 
-	m_IdealActivity = GetStoppedActivity(); 
+{
+	m_IdealActivity = GetStoppedActivity();
 }
 
 #define DIST_TO_CHECK	200
@@ -999,7 +999,7 @@ void CController::Move( float flInterval )
 				{
 					// Wait for a second
 					m_flMoveWaitFinished = gpGlobals->time + m_moveWaitTime;
-					//ALERT( at_aiconsole, "Move %s!!!\n", STRING( pBlocker->pev->classname ) );
+					//ALERT( at_debug, "Move %s!!!\n", STRING( pBlocker->pev->classname ) );
 					return;
 				}
 			}
@@ -1013,7 +1013,7 @@ void CController::Move( float flInterval )
 				}
 				else
 				{
-	 				ALERT ( at_aiconsole, "Couldn't Triangulate\n" );
+					ALERT ( at_debug, "Couldn't Triangulate\n" );
 					Stop();
 					if( m_moveWaitTime > 0 )
 					{
@@ -1023,7 +1023,7 @@ void CController::Move( float flInterval )
 					else
 					{
 						TaskFail("failed to move");
-						//ALERT( at_aiconsole, "%f, %f, %f\n", pev->origin.z, ( pev->origin + ( vecDir * flCheckDist ) ).z, m_Route[m_iRouteIndex].vecLocation.z );
+						//ALERT( at_debug, "%f, %f, %f\n", pev->origin.z, ( pev->origin + ( vecDir * flCheckDist ) ).z, m_Route[m_iRouteIndex].vecLocation.z );
 					}
 					return;
 				}
@@ -1118,7 +1118,7 @@ void CController::MoveExecute( CBaseEntity *pTargetEnt, const Vector &vecDir, fl
 
 	m_velocity = m_velocity * 0.8f + m_flGroundSpeed * vecDir * 0.2f;
 
-	UTIL_MoveToOrigin( ENT( pev ), pev->origin + m_velocity, m_velocity.Length() * flInterval, MOVE_STRAFE );	
+	UTIL_MoveToOrigin( ENT( pev ), pev->origin + m_velocity, m_velocity.Length() * flInterval, MOVE_STRAFE );
 }
 
 class CControllerDead : public CDeadMonster

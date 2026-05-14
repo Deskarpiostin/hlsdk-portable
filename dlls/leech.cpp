@@ -689,7 +689,7 @@ KilledResult CLeech::Killed( entvars_t *pevInflictor, entvars_t *pevAttacker, in
 	Vector vecSplatDir;
 	TraceResult tr;
 
-	//ALERT(at_aiconsole, "Leech: killed\n");
+	//ALERT(at_debug, "Leech: killed\n");
 	// tell owner ( if any ) that we're dead.This is mostly for MonsterMaker functionality.
 	OnDying(false);
 

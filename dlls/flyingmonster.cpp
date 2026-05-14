@@ -31,7 +31,7 @@ int CFlyingMonster::CheckLocalMove( const Vector &vecStart, const Vector &vecEnd
 	// UNDONE: need to check more than the endpoint
 	if( FBitSet( pev->flags, FL_SWIM ) && ( UTIL_PointContents( vecEnd ) != CONTENTS_WATER ) )
 	{
-		// ALERT( at_aiconsole, "can't swim out of water\n" );
+		// ALERT( at_debug, "can't swim out of water\n" );
 		return LOCALMOVE_INVALID;
 	}
 

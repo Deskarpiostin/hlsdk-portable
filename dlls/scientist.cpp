@@ -1165,7 +1165,7 @@ void CScientist::StartFollowingHealTarget(CBaseEntity *pTarget)
 	m_hTargetEnt = pTarget;
 	ClearConditions( bits_COND_CLIENT_PUSH );
 	ClearSchedule();
-	ALERT(at_aiconsole, "Scientist started to follow injured %s\n", STRING(pTarget->pev->classname));
+	ALERT(at_debug, "Scientist started to follow injured %s\n", STRING(pTarget->pev->classname));
 }
 
 bool CScientist::ReadyToHeal()

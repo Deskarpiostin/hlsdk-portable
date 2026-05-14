@@ -1,9 +1,9 @@
 /***
 *
 *	Copyright (c) 1996-2002, Valve LLC. All rights reserved.
-*	
-*	This product contains software technology licensed from Id 
-*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc. 
+*
+*	This product contains software technology licensed from Id
+*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc.
 *	All Rights Reserved.
 *
 *   This source code contains proprietary and confidential information of
@@ -13,7 +13,7 @@
 *
 ****/
 //=========================================================
-// schedule.cpp - functions and data pertaining to the 
+// schedule.cpp - functions and data pertaining to the
 // monsters' AI scheduling system.
 //=========================================================
 
@@ -28,7 +28,6 @@
 #include "soundent.h"
 #include "gamerules.h"
 #include "game.h"
-#include "ai_debug.h"
 
 extern cvar_t npc_lateral_retreat;
 
@@ -80,11 +79,6 @@ void CBaseMonster::ChangeSchedule( Schedule_t *pNewSchedule, bool isSuggested )
 		ClearSuggestedSchedule();
 	}
 
-	if (ShouldReportAIChange(entindex()))
-	{
-		ALERT(at_aiconsole, "%s (%d): changing schedule to %s\n", STRING(pev->classname), entindex(), pNewSchedule->pName);
-	}
-
 	OnChangeSchedule( pNewSchedule );
 
 	if (m_MonsterState == MONSTERSTATE_HUNT)
@@ -100,12 +94,12 @@ void CBaseMonster::ChangeSchedule( Schedule_t *pNewSchedule, bool isSuggested )
 
 	if( m_pSchedule->iInterruptMask & bits_COND_HEAR_SOUND && !(m_pSchedule->iSoundMask) )
 	{
-		ALERT( at_aiconsole, "COND_HEAR_SOUND with no sound mask! (classname: %s; schedule: %s)\n",
+		ALERT( at_debug, "COND_HEAR_SOUND with no sound mask! (classname: %s; schedule: %s)\n",
 			   STRING(pev->classname), m_pSchedule->pName );
 	}
 	else if( m_pSchedule->iSoundMask && !(m_pSchedule->iInterruptMask & bits_COND_HEAR_SOUND) )
 	{
-		ALERT( at_aiconsole, "Sound mask without COND_HEAR_SOUND! (classname: %s; schedule: %s\n",
+		ALERT( at_debug, "Sound mask without COND_HEAR_SOUND! (classname: %s; schedule: %s\n",
 			   STRING(pev->classname), m_pSchedule->pName);
 	}
 
@@ -115,7 +109,7 @@ void CBaseMonster::ChangeSchedule( Schedule_t *pNewSchedule, bool isSuggested )
 		ALERT( at_console, "Schedule %s not in table!!!\n", pNewSchedule->pName );
 	}
 #endif
-	
+
 // this is very useful code if you can isolate a test case in a level with a single monster. It will notify
 // you of every schedule selection the monster makes.
 #if 0
@@ -141,7 +135,7 @@ void CBaseMonster::ChangeSchedule( Schedule_t *pNewSchedule, bool isSuggested )
 				pName = "Unknown";
 			}
 
-			ALERT( at_aiconsole, "%s: picked schedule %s\n", STRING( pev->classname ), pName );
+			ALERT( at_debug, "%s: picked schedule %s\n", STRING( pev->classname ), pName );
 		}
 	}
 #endif// 0
@@ -161,7 +155,7 @@ void CBaseMonster::NextScheduledTask()
 	{
 		// just completed last task in schedule, so make it invalid by clearing it.
 		SetConditions( bits_COND_SCHEDULE_DONE );
-		//ClearSchedule();	
+		//ClearSchedule();
 	}
 }
 
@@ -233,7 +227,7 @@ bool CBaseMonster::FScheduleValid()
 		if( HasConditions( bits_COND_TASK_FAILED ) && m_failSchedule == SCHED_NONE )
 		{
 			// fail! Send a visual indicator.
-			ALERT( at_aiconsole, "Schedule: %s Failed\n", m_pSchedule->pName );
+			ALERT( at_debug, "Schedule: %s Failed\n", m_pSchedule->pName );
 
 			Vector tmp = pev->origin;
 			tmp.z = pev->absmax.z + 16;
@@ -245,45 +239,12 @@ bool CBaseMonster::FScheduleValid()
 	}
 	else if ( HasConditions( m_pSchedule->iInterruptMask ) )
 	{
-		if (ShouldReportAIChange(entindex()))
-		{
-			ALERT(at_console, "%s (%d): schedule %s has been interrupted at task #%d. Conditions: ",
-				STRING(pev->classname), entindex(), m_pSchedule->pName, m_iScheduleIndex);
-			const int conditions = m_afConditions & m_pSchedule->iInterruptMask;
-			for (const auto& condition : g_ConditionsNames)
-			{
-				if (FBitSet(conditions, condition.first))
-				{
-					ALERT(at_console, "%s; ", condition.second);
-				}
-			}
-			if (FBitSet(conditions, bits_COND_HEAR_SOUND|bits_COND_SMELL|bits_COND_SMELL_FOOD))
-			{
-				CSound *pSound = PBestSound();
-				if (pSound)
-				{
-					const int soundMask = pSound->m_iType & m_pSchedule->iSoundMask;
-					if (soundMask)
-					{
-						ALERT(at_console, "Sounds/smells: ");
-						for (const auto& sound : g_SoundNames)
-						{
-							if (FBitSet(soundMask, sound.first))
-							{
-								ALERT(at_console, "%s; ", sound.second);
-							}
-						}
-					}
-				}
-				ALERT(at_console, "\n");
-			}
-		}
 
 		// some condition has interrupted the schedule
 		taskFailReason = "interrupted";
 		return false;
 	}
-	
+
 	return true;
 }
 
@@ -344,11 +305,11 @@ void CBaseMonster::MaintainSchedule()
 			NextScheduledTask();
 		}
 
-		// validate existing schedule 
+		// validate existing schedule
 		if( !FScheduleValid() || m_MonsterState != m_IdealMonsterState )
 		{
 			// if we come into this block of code, the schedule is going to have to be changed.
-			// if the previous schedule was interrupted by a condition, GetIdealState will be 
+			// if the previous schedule was interrupted by a condition, GetIdealState will be
 			// called. Else, a schedule finished normally.
 
 			// Notify the monster that his schedule is changing
@@ -361,7 +322,7 @@ void CBaseMonster::MaintainSchedule()
 			if( HasConditions( bits_COND_TASK_FAILED ) && m_MonsterState == m_IdealMonsterState )
 			{
 				// schedule was invalid because the current task failed to start or complete
-				ALERT( at_aiconsole, "Schedule Failed at %d! (monster: %s, schedule: %s, reason: %s)\n", m_iScheduleIndex, STRING(pev->classname),
+				ALERT( at_debug, "Schedule Failed at %d! (monster: %s, schedule: %s, reason: %s)\n", m_iScheduleIndex, STRING(pev->classname),
 					   m_pSchedule ? m_pSchedule->pName : "unknown", taskFailReason ? taskFailReason : "unspecified" );
 
 				if( m_failSchedule != SCHED_NONE )
@@ -391,7 +352,7 @@ void CBaseMonster::MaintainSchedule()
 		}
 
 		if( m_iTaskStatus == TASKSTATUS_NEW )
-		{	
+		{
 			Task_t *pTask = GetTask();
 			ASSERT( pTask != NULL );
 			TaskBegin();
@@ -441,7 +402,7 @@ void CBaseMonster::MaintainSchedule()
 extern cvar_t anim_attack_reset_fix;
 
 //=========================================================
-// RunTask 
+// RunTask
 //=========================================================
 void CBaseMonster::RunTask( Task_t *pTask )
 {
@@ -542,7 +503,7 @@ void CBaseMonster::RunTask( Task_t *pTask )
 	case TASK_WAIT_FACE_ENEMY:
 		{
 			MakeIdealYaw( m_vecEnemyLKP );
-			ChangeYaw( pev->yaw_speed ); 
+			ChangeYaw( pev->yaw_speed );
 
 			if( gpGlobals->time >= m_flWaitFinished )
 			{
@@ -620,7 +581,7 @@ void CBaseMonster::RunTask( Task_t *pTask )
 				else if( !BBoxFlat() )
 				{
 					// a bit of a hack. If a corpses' bbox is positioned such that being left solid so that it can be attacked will
-					// block the player on a slope or stairs, the corpse is made nonsolid. 
+					// block the player on a slope or stairs, the corpse is made nonsolid.
 					//pev->solid = SOLID_NOT;
 					UTIL_SetSize( pev, Vector( -4, -4, 0 ), Vector( 4, 4, 1 ) );
 				}
@@ -730,7 +691,7 @@ void CBaseMonster::RunTask( Task_t *pTask )
 					}
 					if (!startedSequence)
 						pev->framerate = 1.0f; // TODO: not sure if this is needed at all. Just preserving the original behavior
-					//ALERT( at_aiconsole, "Script %s has begun for %s\n", STRING( m_pCine->m_iszPlay ), STRING( pev->classname ) );
+					//ALERT( at_debug, "Script %s has begun for %s\n", STRING( m_pCine->m_iszPlay ), STRING( pev->classname ) );
 				}
 				else if ( FBitSet(m_pCine->pev->spawnflags, SF_SCRIPT_FORCE_IDLE_LOOPING) && !FStringNull( m_pCine->m_iszIdle) && !m_pCine->IsAction() )
 				{
@@ -823,7 +784,7 @@ void CBaseMonster::SetTurnActivity()
 //=========================================================
 // Start task - selects the correct activity and performs
 // any necessary calculations to start the next task on the
-// schedule. 
+// schedule.
 //=========================================================
 void CBaseMonster::StartTask( Task_t *pTask )
 {
@@ -1099,7 +1060,7 @@ void CBaseMonster::StartTask( Task_t *pTask )
 				// The point is to just run away from danger. Try to find a node without actual cover.
 				else if (FindSpotAway( pBestSound->m_vecOrigin, pBestSound->m_iVolume, CoverRadius(), FINDSPOTAWAY_CHECK_SPOT|FINDSPOTAWAY_RUN ))
 				{
-					//ALERT(at_aiconsole, "Using run away\n");
+					//ALERT(at_debug, "Using run away\n");
 					m_flMoveWaitFinished = gpGlobals->time + pTask->flData;
 					TaskComplete();
 				}
@@ -1114,7 +1075,7 @@ void CBaseMonster::StartTask( Task_t *pTask )
 
 					if( MoveToLocation( ACT_RUN, 0, targetLocation ) )
 					{
-						//ALERT(at_aiconsole, "Using the last resort to run away\n");
+						//ALERT(at_debug, "Using the last resort to run away\n");
 						TaskComplete();
 					}
 				}
@@ -1137,13 +1098,13 @@ void CBaseMonster::StartTask( Task_t *pTask )
 		}
 	case TASK_FACE_LASTPOSITION:
 		MakeIdealYaw( m_vecLastPosition );
-		SetTurnActivity(); 
+		SetTurnActivity();
 		break;
 	case TASK_FACE_TARGET:
 		if( m_hTargetEnt != 0 )
 		{
 			MakeIdealYaw( m_hTargetEnt->pev->origin );
-			SetTurnActivity(); 
+			SetTurnActivity();
 		}
 		else
 			TaskFail("no target ent");
@@ -1192,7 +1153,7 @@ void CBaseMonster::StartTask( Task_t *pTask )
 	case TASK_WAIT_FACE_ENEMY:
 		{
 			// set a future time that tells us when the wait is over.
-			m_flWaitFinished = gpGlobals->time + pTask->flData;	
+			m_flWaitFinished = gpGlobals->time + pTask->flData;
 			break;
 		}
 	case TASK_WAIT_PATROL_TURNING:
@@ -1243,7 +1204,7 @@ void CBaseMonster::StartTask( Task_t *pTask )
 				// This monster can't do this!
 				if( LookupActivity( newActivity ) == ACTIVITY_NOT_AVAILABLE )
 					TaskComplete();
-				else 
+				else
 				{
 					if (pGoalEnt != 0)
 					{
@@ -1583,7 +1544,7 @@ void CBaseMonster::StartTask( Task_t *pTask )
 		}
 	case TASK_STRAFE_PATH:
 		{
-			Vector2D vec2DirToPoint; 
+			Vector2D vec2DirToPoint;
 			Vector2D vec2RightSide;
 
 			// to start strafing, we have to first figure out if the target is on the left side or right side
@@ -1666,7 +1627,7 @@ void CBaseMonster::StartTask( Task_t *pTask )
 	case TASK_SOUND_ANGRY:
 		{
 			// sounds are complete as soon as we get here, cause we've already played them.
-			ALERT( at_aiconsole, "SOUND\n" );			
+			ALERT( at_debug, "SOUND\n" );
 			TaskComplete();
 			break;
 		}
@@ -1747,7 +1708,7 @@ void CBaseMonster::StartTask( Task_t *pTask )
 				CBaseEntity* pGoalEnt = ScriptedMoveGoal();
 				if( pGoalEnt != 0 )
 				{
-					ALERT(at_aiconsole, "Forcibly teleporting the monster to script after %d attempts\n", m_pCine->m_moveFailCount );
+					ALERT(at_debug, "Forcibly teleporting the monster to script after %d attempts\n", m_pCine->m_moveFailCount );
 					UTIL_SetOrigin( pev, pGoalEnt->pev->origin );
 				}
 				m_pCine->m_moveFailCount = 0;
@@ -1795,9 +1756,9 @@ void CBaseMonster::StartTask( Task_t *pTask )
 	case TASK_GET_HEALTH_FROM_FOOD:
 		if (g_modFeatures.monsters_eat_for_health)
 		{
-			ALERT(at_aiconsole, "%s eating. Current health: %d/%d\n", STRING(pev->classname), (int)pev->health, (int)pev->max_health);
+			ALERT(at_debug, "%s eating. Current health: %d/%d\n", STRING(pev->classname), (int)pev->health, (int)pev->max_health);
 			TakeHealth(this, pev->max_health * pTask->flData, DMG_GENERIC);
-			ALERT(at_aiconsole, "%s health after eating: %d/%d\n", STRING(pev->classname), (int)pev->health, (int)pev->max_health);
+			ALERT(at_debug, "%s health after eating: %d/%d\n", STRING(pev->classname), (int)pev->health, (int)pev->max_health);
 		}
 		TaskComplete();
 		break;
@@ -1888,7 +1849,7 @@ void CBaseMonster::StartTask( Task_t *pTask )
 					if (pBlocker->entindex() != 0)
 					{
 						pBlockers.push_back(pBlocker);
-						//ALERT(at_aiconsole, "%s:  %s blocker is %s\n", STRING(pev->classname), context, STRING(pBlocker->pev->classname));
+						//ALERT(at_debug, "%s:  %s blocker is %s\n", STRING(pev->classname), context, STRING(pBlocker->pev->classname));
 					}
 				};
 
@@ -1945,14 +1906,14 @@ void CBaseMonster::StartTask( Task_t *pTask )
 		break;
 	default:
 		{
-			ALERT( at_aiconsole, "No StartTask entry for %d\n", (SHARED_TASKS)pTask->iTask );
+			ALERT( at_debug, "No StartTask entry for %d\n", (SHARED_TASKS)pTask->iTask );
 			break;
 		}
 	}
 }
 
 //=========================================================
-// GetTask - returns a pointer to the current 
+// GetTask - returns a pointer to the current
 // scheduled task. NULL if there's a problem.
 //=========================================================
 Task_t *CBaseMonster::GetTask()
@@ -1998,7 +1959,7 @@ bool CBaseMonster::SuggestSchedule(int schedule, CBaseEntity* spotEntity, float 
 			m_suggestedScheduleOrigin = pos;
 		} else {
 			if (FBitSet(flags, SUGGEST_SCHEDULE_FLAG_SPOT_IS_POSITION)) {
-				ALERT(at_aiconsole, "SuggestSchedule: couldn't calc position for %s\n", STRING(spotEntity->pev->classname));
+				ALERT(at_debug, "SuggestSchedule: couldn't calc position for %s\n", STRING(spotEntity->pev->classname));
 				return false;
 			}
 
@@ -2033,7 +1994,7 @@ static bool CalcSuggestedSpotEntity(CBaseMonster* pMonster, CBaseEntity* pSpotEn
 		*outVec = pSpotEntity->pev->origin;
 		if (viewOffset)
 			*viewOffset = pSpotEntity->pev->view_ofs;
-		ALERT(at_aiconsole, "%s picked %s as spot for suggested schedule\n", STRING(pMonster->pev->classname), STRING(pSpotEntity->pev->classname));
+		ALERT(at_debug, "%s picked %s as spot for suggested schedule\n", STRING(pMonster->pev->classname), STRING(pSpotEntity->pev->classname));
 		return true;
 	}
 	return false;
@@ -2112,7 +2073,7 @@ Schedule_t *CBaseMonster::GetSchedule()
 		}
 	case MONSTERSTATE_NONE:
 		{
-			ALERT( at_aiconsole, "MONSTERSTATE IS NONE!\n" );
+			ALERT( at_debug, "MONSTERSTATE IS NONE!\n" );
 			break;
 		}
 	case MONSTERSTATE_IDLE:
@@ -2188,7 +2149,7 @@ Schedule_t *CBaseMonster::GetSchedule()
 									!isDanger && // but not danger
 									( !isPlayer || IDefaultRelationship(CLASS_PLAYER) != R_AL )) // and it's not combat sound produced by ally player
 							{
-								ALERT(at_aiconsole, "%s trying to investigate sound after combat\n", STRING(pev->classname));
+								ALERT(at_debug, "%s trying to investigate sound after combat\n", STRING(pev->classname));
 								return GetScheduleOfType( SCHED_INVESTIGATE_SOUND );
 							}
 						}
@@ -2197,7 +2158,7 @@ Schedule_t *CBaseMonster::GetSchedule()
 				}
 				else if (HasMemory(bits_MEMORY_SHOULD_ROAM_IN_ALERT))
 				{
-					ALERT(at_aiconsole, "%s trying to freeroam after combat\n", STRING(pev->classname));
+					ALERT(at_debug, "%s trying to freeroam after combat\n", STRING(pev->classname));
 					Forget(bits_MEMORY_SHOULD_ROAM_IN_ALERT);
 					return GetScheduleOfType( SCHED_FREEROAM_ALERT );
 				}
@@ -2238,7 +2199,7 @@ Schedule_t *CBaseMonster::GetSchedule()
 
 			if ( HasConditions( bits_COND_ENEMY_LOST ) )
 			{
-				ALERT(at_aiconsole, "%s did not see an enemy %s for a while. Just forget about it\n", STRING(pev->classname), m_hEnemy != 0 ? STRING(m_hEnemy->pev->classname) : "");
+				ALERT(at_debug, "%s did not see an enemy %s for a while. Just forget about it\n", STRING(pev->classname), m_hEnemy != 0 ? STRING(m_hEnemy->pev->classname) : "");
 				m_hEnemy = NULL;
 
 				if( GetEnemy(true) )
@@ -2276,7 +2237,7 @@ Schedule_t *CBaseMonster::GetSchedule()
 					return GetScheduleOfType( SCHED_CHASE_ENEMY );
 				}
 			}
-			else  
+			else
 			{
 				// we can see the enemy
 				if( HasConditions( bits_COND_CAN_RANGE_ATTACK1 ) )
@@ -2307,7 +2268,7 @@ Schedule_t *CBaseMonster::GetSchedule()
 				}
 				else
 				{
-					ALERT( at_aiconsole, "No suitable combat schedule!\n" );
+					ALERT( at_debug, "No suitable combat schedule!\n" );
 				}
 			}
 			break;
@@ -2321,7 +2282,7 @@ Schedule_t *CBaseMonster::GetSchedule()
 		{
 			if( !m_pCine )
 			{
-				ALERT( at_aiconsole, "Script failed for %s\n", STRING( pev->classname ) );
+				ALERT( at_debug, "Script failed for %s\n", STRING( pev->classname ) );
 				CineCleanup();
 				return GetScheduleOfType( SCHED_IDLE_STAND );
 			}
@@ -2356,7 +2317,7 @@ Schedule_t *CBaseMonster::GetSchedule()
 		}
 	default:
 		{
-			ALERT( at_aiconsole, "Invalid State for GetSchedule!\n" );
+			ALERT( at_debug, "Invalid State for GetSchedule!\n" );
 			break;
 		}
 	}

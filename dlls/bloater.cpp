@@ -1,9 +1,9 @@
 /***
 *
 *	Copyright (c) 1996-2002, Valve LLC. All rights reserved.
-*	
-*	This product contains software technology licensed from Id 
-*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc. 
+*
+*	This product contains software technology licensed from Id
+*	Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc.
 *	All Rights Reserved.
 *
 *   This source code contains proprietary and confidential information of
@@ -54,7 +54,7 @@ public:
 LINK_ENTITY_TO_CLASS( monster_bloater, CBloater )
 
 //=========================================================
-// Classify - indicates this monster's place in the 
+// Classify - indicates this monster's place in the
 // relationship table.
 //=========================================================
 int CBloater::DefaultClassify()
@@ -124,7 +124,7 @@ void CBloater::Precache()
 {
 	PrecacheMyModel( "models/floater.mdl" );
 	PrecacheMyGibModel();
-}	
+}
 
 //=========================================================
 // AI Schedules Specific to this monster
@@ -750,7 +750,7 @@ void CFloater::Move( float flInterval )
 				{
 					// Wait for a second
 					m_flMoveWaitFinished = gpGlobals->time + m_moveWaitTime;
-					//ALERT( at_aiconsole, "Move %s!!!\n", STRING( pBlocker->pev->classname ) );
+					//ALERT( at_debug, "Move %s!!!\n", STRING( pBlocker->pev->classname ) );
 					return;
 				}
 			}
@@ -764,7 +764,7 @@ void CFloater::Move( float flInterval )
 				}
 				else
 				{
-	 				ALERT ( at_aiconsole, "Couldn't Triangulate. Blocker: %s\n", pBlocker ? STRING(pBlocker->pev->classname) : "Unknown" );
+					ALERT ( at_debug, "Couldn't Triangulate. Blocker: %s\n", pBlocker ? STRING(pBlocker->pev->classname) : "Unknown" );
 					Stop();
 					if( m_moveWaitTime > 0 )
 					{
@@ -779,7 +779,7 @@ void CFloater::Move( float flInterval )
 						}
 
 						TaskFail("failed to move");
-						//ALERT( at_aiconsole, "%f, %f, %f\n", pev->origin.z, ( pev->origin + ( vecDir * flCheckDist ) ).z, m_Route[m_iRouteIndex].vecLocation.z );
+						//ALERT( at_debug, "%f, %f, %f\n", pev->origin.z, ( pev->origin + ( vecDir * flCheckDist ) ).z, m_Route[m_iRouteIndex].vecLocation.z );
 					}
 					return;
 				}

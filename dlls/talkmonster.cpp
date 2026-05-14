@@ -1221,7 +1221,7 @@ static const char* ConstructSentenceWithPrefix(const char* prefix, const char* d
 	}
 	else
 	{
-		ALERT(at_aiconsole, "Can't use Custom Speech Group '%s' because default sentence '%s' has no underscore character!\n", prefix, defaultSentence);
+		ALERT(at_debug, "Can't use Custom Speech Group '%s' because default sentence '%s' has no underscore character!\n", prefix, defaultSentence);
 		return NULL;
 	}
 }
@@ -1594,7 +1594,7 @@ bool CTalkMonster::FindAndCallMedic()
 			PlayCallForMedic();
 
 		Forget(bits_MEMORY_SHOULD_ROAM_IN_ALERT);
-		ALERT( at_aiconsole, "Injured %s called for %s\n", STRING(pev->classname), STRING(foundMedic->pev->classname) );
+		ALERT( at_debug, "Injured %s called for %s\n", STRING(pev->classname), STRING(foundMedic->pev->classname) );
 		foundMedic->StartFollowingHealTarget(this);
 
 		return true;
@@ -1614,7 +1614,7 @@ void CTalkMonster::TrySmellTalk()
 	// clear smell bits periodically
 	if( gpGlobals->time > m_flLastSaidSmelled )
 	{
-		//ALERT( at_aiconsole, "Clear smell bits\n" );
+		//ALERT( at_debug, "Clear smell bits\n" );
 		ClearBits( m_bitsSaid, bit_saidSmelled );
 	}
 
@@ -1773,7 +1773,7 @@ void CTalkMonster::RegisterTalkMonster(const char *className, bool canFollow, sh
 			m_szFriends[i].canFollow = canFollow;
 			m_szFriends[i].category = followerCategory;
 
-			ALERT(at_aiconsole, "Registered %s as talk friend\n", className);
+			ALERT(at_debug, "Registered %s as talk friend\n", className);
 			return;
 		}
 		else if (FStrEq(m_szFriends[i].name, className))
@@ -1801,7 +1801,7 @@ void CTalkMonster::RegisterMedic(const char* className)
 		{
 			strncpyEnsureTermination(m_szMedics[i], className);
 
-			ALERT(at_aiconsole, "Registered %s as medic\n", className);
+			ALERT(at_debug, "Registered %s as medic\n", className);
 			return;
 		}
 		else if (FStrEq(m_szMedics[i], className))

@@ -716,7 +716,7 @@ void CFuncPlat::HitTop()
 
 void CFuncPlat::Blocked( CBaseEntity *pOther )
 {
-	ALERT( at_aiconsole, "%s Blocked by %s\n", STRING( pev->classname ), STRING( pOther->pev->classname ) );
+	ALERT( at_debug, "%s Blocked by %s\n", STRING( pev->classname ), STRING( pOther->pev->classname ) );
 
 	// Hurt the blocker a little
 	const bool shouldInstaGib = (m_instantGibCorpses && pOther->IsCorpse()) || (g_modFeatures.ShouldCrushTinyCreatures(m_handleTinyCreatures) && pOther->IsTinyCreature());
@@ -1033,7 +1033,7 @@ void CFuncTrain::Next()
 	{
 		// don't copy speed from target if it is 0 (uninitialized)
 		pev->speed = m_pevCurrentTarget->speed;
-		ALERT( at_aiconsole, "Train %s speed to %4.2f\n", STRING( pev->targetname ), (double)pev->speed );
+		ALERT( at_debug, "Train %s speed to %4.2f\n", STRING( pev->targetname ), (double)pev->speed );
 	}
 	m_pevCurrentTarget = pTarg->pev;// keep track of this since path corners change our target for us.
 
@@ -1288,7 +1288,7 @@ void CFuncTrackTrain::Blocked( CBaseEntity *pOther )
 	else
 		pevOther->velocity = ( pevOther->origin - pev->origin ).Normalize() * pev->dmg;
 
-	ALERT( at_aiconsole, "TRAIN(%s): Blocked by %s (dmg:%.2f)\n", STRING( pev->targetname ), STRING( pOther->pev->classname ), (double)pev->dmg );
+	ALERT( at_debug, "TRAIN(%s): Blocked by %s (dmg:%.2f)\n", STRING( pev->targetname ), STRING( pOther->pev->classname ), (double)pev->dmg );
 
 	const bool shouldInstaGib = (m_instantGibCorpses && pOther->IsCorpse()) || (g_modFeatures.ShouldCrushTinyCreatures(m_handleTinyCreatures) && pOther->IsTinyCreature());
 	if (pev->dmg <= 0 && !shouldInstaGib)
@@ -1352,7 +1352,7 @@ void CFuncTrackTrain::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TY
 		}
 		pev->speed = m_speed * delta;
 		Next();	
-		ALERT( at_aiconsole, "TRAIN(%s), speed to %.2f\n", STRING( pev->targetname ), (double)pev->speed );
+		ALERT( at_debug, "TRAIN(%s), speed to %.2f\n", STRING( pev->targetname ), (double)pev->speed );
 	}
 }
 
@@ -1456,7 +1456,7 @@ void CFuncTrackTrain::Next()
 
 	if( !pev->speed )
 	{
-		ALERT( at_aiconsole, "TRAIN(%s): Speed is 0\n", STRING( pev->targetname ) );
+		ALERT( at_debug, "TRAIN(%s): Speed is 0\n", STRING( pev->targetname ) );
 		StopSound();
 		return;
 	}
@@ -1465,7 +1465,7 @@ void CFuncTrackTrain::Next()
 	//	m_ppath = CPathTrack::Instance( FIND_ENTITY_BY_TARGETNAME( NULL, STRING( pev->target ) ) );
 	if( !m_ppath )
 	{	
-		ALERT( at_aiconsole, "TRAIN(%s): Lost path\n", STRING( pev->targetname ) );
+		ALERT( at_debug, "TRAIN(%s): Lost path\n", STRING( pev->targetname ) );
 		StopSound();
 		return;
 	}
@@ -1549,7 +1549,7 @@ void CFuncTrackTrain::Next()
 				{
 					// don't copy speed from target if it is 0 (uninitialized)
 					pev->speed = pFire->pev->speed;
-					ALERT( at_aiconsole, "TrackTrain %s speed to %4.2f\n", STRING( pev->targetname ), (double)pev->speed );
+					ALERT( at_debug, "TrackTrain %s speed to %4.2f\n", STRING( pev->targetname ), (double)pev->speed );
 				}
 			}
 
@@ -1592,7 +1592,7 @@ void CFuncTrackTrain::DeadEnd()
 
 	pTrack = m_ppath;
 
-	ALERT( at_aiconsole, "TRAIN(%s): Dead end ", STRING( pev->targetname ) );
+	ALERT( at_debug, "TRAIN(%s): Dead end ", STRING( pev->targetname ) );
 	// Find the dead end path node
 	// HACKHACK -- This is bugly, but the train can actually stop moving at a different node depending on it's speed
 	// so we have to traverse the list to it's end.
@@ -1622,12 +1622,12 @@ void CFuncTrackTrain::DeadEnd()
 	pev->avelocity = g_vecZero;
 	if( pTrack )
 	{
-		ALERT( at_aiconsole, "at %s\n", STRING( pTrack->pev->targetname ) );
+		ALERT( at_debug, "at %s\n", STRING( pTrack->pev->targetname ) );
 		if( pTrack->pev->netname )
 			FireTargets( STRING( pTrack->pev->netname ), this, this );
 	}
 	else
-		ALERT( at_aiconsole, "\n" );
+		ALERT( at_debug, "\n" );
 }
 
 void CFuncTrackTrain::SetControls( entvars_t *pevControls )
@@ -1724,7 +1724,7 @@ void CFuncTrackTrain::NearestPath()
 		return;
 	}
 
-	ALERT( at_aiconsole, "TRAIN: %s, Nearest track is %s\n", STRING( pev->targetname ), STRING( pNearest->pev->targetname ) );
+	ALERT( at_debug, "TRAIN: %s, Nearest track is %s\n", STRING( pev->targetname ), STRING( pNearest->pev->targetname ) );
 	// If I'm closer to the next path_track on this path, then it's my real path
 	pTrack = ( (CPathTrack *)pNearest )->GetNext();
 	if( pTrack )

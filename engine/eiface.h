@@ -38,9 +38,9 @@
 typedef enum
 {
 	at_notice,
-	at_console,	// same as at_notice, but forces a ConPrintf, not a message box
-	at_aiconsole,	// same as at_console, but only shown if developer level is 2!
-	at_warning,
+	at_console = 1,	// same as at_notice, but forces a ConPrintf, not a message box
+	at_debug = 2,	// developer-only console message
+	at_warning = 3,
 	at_error,
 	at_logged		// Server print to console ( only in multiplayer games ).
 } ALERT_TYPE;

@@ -681,7 +681,7 @@ void CBigMomma::BeforeApplyDamageToHealth(float flDamage)
 		{
 			pev->health = flDamage + 1;
 			Remember( bits_MEMORY_ADVANCE_NODE | bits_MEMORY_COMPLETED_NODE );
-			ALERT( at_aiconsole, "BM: Finished node health!!!\n" );
+			ALERT( at_debug, "BM: Finished node health!!!\n" );
 		}
 	}
 }
@@ -857,7 +857,7 @@ void CBigMomma::NodeStart( string_t iszNextNode )
 
 	if( !pTarget )
 	{
-		ALERT( at_aiconsole, "BM: Finished the path!!\n" );
+		ALERT( at_debug, "BM: Finished the path!!\n" );
 		Remember( bits_MEMORY_PATH_FINISHED );
 		return;
 	}
@@ -888,7 +888,7 @@ void CBigMomma::NodeReach()
 
 	if (g_modFeatures.bigmomma_lastnode_fix && FStringNull(pev->netname))
 	{
-		ALERT( at_aiconsole, "BM: Finished the path!!\n" );
+		ALERT( at_debug, "BM: Finished the path!!\n" );
 		Remember( bits_MEMORY_PATH_FINISHED );
 		return;
 	}
@@ -1054,16 +1054,16 @@ void CBigMomma::StartTask( Task_t *pTask )
 			}
 			NodeStart( pev->netname );
 			TaskComplete();
-			ALERT( at_aiconsole, "BM: Found node '%s'\n", STRING( pev->netname ) );
+			ALERT( at_debug, "BM: Found node '%s'\n", STRING( pev->netname ) );
 		}
 		break;
 	case TASK_NODE_DELAY:
 		m_nodeTime = gpGlobals->time + pTask->flData;
 		TaskComplete();
-		ALERT( at_aiconsole, "BM: FAIL! Delay %.2f\n", (double)pTask->flData );
+		ALERT( at_debug, "BM: FAIL! Delay %.2f\n", (double)pTask->flData );
 		break;
 	case TASK_PROCESS_NODE:
-		ALERT( at_aiconsole, "BM: Reached node '%s'\n", STRING( pev->netname ) );
+		ALERT( at_debug, "BM: Reached node '%s'\n", STRING( pev->netname ) );
 		NodeReach();
 		TaskComplete();
 		break;
@@ -1084,12 +1084,12 @@ void CBigMomma::StartTask( Task_t *pTask )
 					pev->sequence = sequence;
 					pev->frame = 0;
 					ResetSequenceInfo();
-					ALERT( at_aiconsole, "BM: Playing node %s '%s'\n", pTask->iTask == TASK_PLAY_NODE_PRESEQUENCE ? "presequence" : "sequence", STRING( sequenceName ) );
+					ALERT( at_debug, "BM: Playing node %s '%s'\n", pTask->iTask == TASK_PLAY_NODE_PRESEQUENCE ? "presequence" : "sequence", STRING( sequenceName ) );
 					return;
 				}
 				else
 				{
-					ALERT( at_aiconsole, "BM: Couldn't play node sequence '%s' - the sequence is missing from the model\n", STRING( sequenceName ) );
+					ALERT( at_debug, "BM: Couldn't play node sequence '%s' - the sequence is missing from the model\n", STRING( sequenceName ) );
 				}
 			}
 			TaskComplete();
@@ -1104,7 +1104,7 @@ void CBigMomma::StartTask( Task_t *pTask )
 		CInfoBM* pTargetNode = GetTargetInfoBM();
 		if (pTargetNode && pTargetNode->pev->spawnflags & SF_INFOBM_FORGET_ENEMIES)
 		{
-			ALERT(at_aiconsole, "BM: Forgets about enemies\n", STRING(pev->classname));
+			ALERT(at_debug, "BM: Forgets about enemies\n", STRING(pev->classname));
 			m_hEnemy = NULL;
 			for (EHANDLE& oldEnemy : m_hOldEnemy)
 			{
@@ -1149,9 +1149,9 @@ void CBigMomma::StartTask( Task_t *pTask )
 		else
 			m_flWait = gpGlobals->time + delay;
 		if( pTargetNode && pTargetNode->pev->spawnflags & SF_INFOBM_WAIT )
-			ALERT( at_aiconsole, "BM: Wait at node %s forever\n", STRING( pev->netname ) );
+			ALERT( at_debug, "BM: Wait at node %s forever\n", STRING( pev->netname ) );
 		else
-			ALERT( at_aiconsole, "BM: Wait at node %s for %.2f\n", STRING( pev->netname ), delay );
+			ALERT( at_debug, "BM: Wait at node %s for %.2f\n", STRING( pev->netname ), delay );
 	}
 		break;
 
@@ -1179,7 +1179,7 @@ void CBigMomma::StartTask( Task_t *pTask )
 				}
 			}
 		}
-		ALERT( at_aiconsole, "BM: Moving to node '%s'\n", STRING( pev->netname ) );
+		ALERT( at_debug, "BM: Moving to node '%s'\n", STRING( pev->netname ) );
 		break;
 	case TASK_MELEE_ATTACK1:
 		// Play an attack sound here
@@ -1209,7 +1209,7 @@ void CBigMomma::RunTask( Task_t *pTask )
 				// overlap the range to prevent oscillation
 				if( (m_vecMoveGoal - pev->origin ).IsLength2DLessThan(GetNodeRange()) || MovementIsComplete() )
 				{
-					ALERT( at_aiconsole, "BM: Reached node!\n" );
+					ALERT( at_debug, "BM: Reached node!\n" );
 					TaskComplete();
 					RouteClear();		// Stop moving
 				}
@@ -1225,7 +1225,7 @@ void CBigMomma::RunTask( Task_t *pTask )
 			if( gpGlobals->time > m_flWaitFinished )
 			{
 				TaskComplete();
-				ALERT( at_aiconsole, "BM: The WAIT is over!\n" );
+				ALERT( at_debug, "BM: The WAIT is over!\n" );
 			}
 		}
 		break;

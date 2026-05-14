@@ -883,7 +883,7 @@ void CNihilanth::NextActivity()
 		else
 		{
 			m_hRecharger = NULL;
-			ALERT( at_aiconsole, "nihilanth can't find %s\n", szName );
+			ALERT( at_debug, "nihilanth can't find %s\n", szName );
 			m_iLevel++;
 			if( m_iLevel > 9 )
 				m_irritation = 2;
@@ -1231,7 +1231,7 @@ void CNihilanth::HandleAnimEvent( MonsterEvent_t *pEvent )
 
 				EmitSoundScript(ballAttackSoundScript);
 
-				ALERT( at_aiconsole, "nihilanth can't target %s\n", szText );
+				ALERT( at_debug, "nihilanth can't target %s\n", szText );
 
 				const Visual* pHandVisual = GetVisual(handLightVisual);
 				SendEntLight(entindex(), pev->origin, pHandVisual, 3);

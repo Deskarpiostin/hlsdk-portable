@@ -38,10 +38,13 @@
 #include "error_collector.h"
 #include "weapons.h"
 #include "weapon_templates.h"
-#include "ai_debug.h"
 
 #include <chrono>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <dirent.h>
+#endif
 #include <vector>
 #include <string>
 #include <cctype>
@@ -98,21 +101,41 @@ void ParseCoopGameProfiles()
 	char xcDir[768];
 	safe_snprintf(xcDir, sizeof(xcDir), "%s/xc/games", gameDir);
 
-	DIR* dir = opendir(xcDir);
-	if (!dir)
-		return;
-
 	const char* currentMap = (gpGlobals && gpGlobals->mapname) ? STRING(gpGlobals->mapname) : "";
 	std::string normalizedCurrentMap = NormalizeMapName(currentMap ? currentMap : "");
 	if (normalizedCurrentMap.empty())
-	{
-		closedir(dir);
 		return;
+
+	std::vector<std::string> profileFiles;
+#ifdef _WIN32
+	char searchPath[800];
+	safe_snprintf(searchPath, sizeof(searchPath), "%s/*.txt", xcDir);
+	_finddata_t fileInfo;
+	intptr_t findHandle = _findfirst(searchPath, &fileInfo);
+	if (findHandle == -1)
+		return;
+	do
+	{
+		if ((fileInfo.attrib & _A_SUBDIR) == 0)
+			profileFiles.push_back(fileInfo.name);
 	}
+	while (_findnext(findHandle, &fileInfo) == 0);
+	_findclose(findHandle);
+#else
+	DIR* dir = opendir(xcDir);
+	if (!dir)
+		return;
 	struct dirent* ent = nullptr;
 	while ((ent = readdir(dir)) != nullptr)
 	{
-		const char* fileName = ent->d_name;
+		profileFiles.push_back(ent->d_name);
+	}
+	closedir(dir);
+#endif
+
+	for (const std::string& profileFile : profileFiles)
+	{
+		const char* fileName = profileFile.c_str();
 		const size_t len = strlen(fileName);
 		if (len < 5 || stricmp(fileName + len - 4, ".txt") != 0)
 			continue;
@@ -122,8 +145,13 @@ void ParseCoopGameProfiles()
 
 		int fileSize = 0;
 		byte* pMemFile = g_engfuncs.pfnLoadFileForMe(relPath, &fileSize);
-		if (!pMemFile || fileSize <= 0)
+		if (!pMemFile)
 			continue;
+		if (fileSize <= 0)
+		{
+			g_engfuncs.pfnFreeFile(pMemFile);
+			continue;
+		}
 
 		std::string data((const char*)pMemFile, fileSize);
 		g_engfuncs.pfnFreeFile(pMemFile);
@@ -178,7 +206,6 @@ void ParseCoopGameProfiles()
 		break;
 	}
 
-	closedir(dir);
 }
 
 const char* ResolveCoopModelPath(const char* modelPath)
@@ -962,59 +989,6 @@ cvar_t *g_enable_cheats = NULL;
 
 cvar_t *g_psv_developer = NULL;
 
-void Cmd_ReportAIState()
-{
-	ReportAIStateByClassname(CMD_ARGV( 1 ));
-}
-
-void Cmd_AddScheduleWatcher()
-{
-	const char* classnameOrEntIndex = CMD_ARGV(1);
-	if (!classnameOrEntIndex || !*classnameOrEntIndex)
-	{
-		ALERT(at_console, "Must provide an argument!\n");
-		return;
-	}
-	int entindex = atoi(classnameOrEntIndex);
-	if (entindex != 0)
-	{
-		if (entindex > 0)
-		{
-			CBaseMonster* pMonster = nullptr;
-			edict_t* edict = INDEXENT(entindex);
-			if (edict)
-			{
-				CBaseEntity* pEntity = CBaseEntity::Instance(edict);
-				if (pEntity)
-				{
-					pMonster = pEntity->MyMonsterPointer();
-				}
-			}
-			if (pMonster)
-			{
-				ALERT(at_aiconsole, "Adding monster \"%s\" with entindex %d to the schedule watcher\n", STRING(pMonster->pev->classname), entindex);
-				AddScheduleWatcher(entindex);
-			}
-			else
-			{
-				ALERT(at_aiconsole, "Entity with entindex %d is not a monster!\n", entindex);
-			}
-		}
-	}
-	else
-	{
-		CBaseEntity* pEntity = 0;
-		ALERT(at_console, "Adding all monsters of \"%s\" classname to the schedule watcher\n", classnameOrEntIndex);
-		while((pEntity = UTIL_FindEntityByClassname(pEntity, classnameOrEntIndex)) != 0) {
-			CBaseMonster* pMonster = pEntity->MyMonsterPointer();
-			if (pMonster) {
-				ALERT(at_console, "Adding the monster \"%s\" (%d)\n", FStringNull(pMonster->pev->targetname) ? "" : STRING(pMonster->pev->targetname), pMonster->entindex());
-				AddScheduleWatcher(pMonster->entindex());
-			}
-		}
-	}
-}
-
 void Cmd_NumberOfEntities()
 {
 	if (CMD_ARGC() > 1)
@@ -1688,11 +1662,11 @@ void ParseModConfigs()
 	auto finish = std::chrono::steady_clock::now();
 	unsigned int milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(finish-start).count();
 
-	ALERT(at_aiconsole, "Parsed mod configuration files in %u milliseconds\n", milliseconds);
+	ALERT(at_debug, "Parsed mod configuration files in %u milliseconds\n", milliseconds);
 	if (entitiesRead)
 	{
 		unsigned int millisecondsEntities = std::chrono::duration_cast<std::chrono::milliseconds>(finishEntities-startEntities).count();
-		ALERT(at_aiconsole, "%u of them are spent on templates/entities.json\n", millisecondsEntities);
+		ALERT(at_debug, "%u of them are spent on templates/entities.json\n", millisecondsEntities);
 	}
 }
 
@@ -1850,8 +1824,6 @@ void GameDLLInit()
 	}
 
 	// Register server commands
-	g_engfuncs.pfnAddServerCommand("report_ai_state", Cmd_ReportAIState);
-	g_engfuncs.pfnAddServerCommand("watch_ai_schedules", Cmd_AddScheduleWatcher);
 	g_engfuncs.pfnAddServerCommand("entities_count", Cmd_NumberOfEntities);
 	g_engfuncs.pfnAddServerCommand("set_global_state", Cmd_SetGlobalState);
 	g_engfuncs.pfnAddServerCommand("set_global_value", Cmd_SetGlobalValue);

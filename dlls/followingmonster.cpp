@@ -774,7 +774,7 @@ int CFollowingMonster::DoFollowerUse(CBaseEntity *pCaller, bool saySentence, USE
 
 			if( m_afMemory & bits_MEMORY_PROVOKED )
 			{
-				ALERT( at_aiconsole, "%s: I'm not following you, you evil person!\n", STRING(pev->classname) );
+				ALERT( at_debug, "%s: I'm not following you, you evil person!\n", STRING(pev->classname) );
 				return FOLLOWING_DISCARDED;
 			}
 			else

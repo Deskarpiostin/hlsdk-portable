@@ -484,6 +484,6 @@ void CSoundEnt::ReportUpdate()
 	{
 		const int freeSoundNum = pSoundEnt->ISoundsInList( SOUNDLISTTYPE_FREE );
 		pSoundEnt->m_cLastActiveSounds = activeSoundNum;
-		ALERT(at_aiconsole, "Soundlist: active %d; free %d out of %d\n", activeSoundNum, freeSoundNum, MAX_WORLD_SOUNDS);
+		ALERT(at_debug, "Soundlist: active %d; free %d out of %d\n", activeSoundNum, freeSoundNum, MAX_WORLD_SOUNDS);
 	}
 }

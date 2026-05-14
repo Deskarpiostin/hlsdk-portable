@@ -587,7 +587,7 @@ void CBasePlayer::SetMaxHealth(int maxHealth, bool clampValue)
 {
 	pev->max_health = maxHealth;
 	pev->max_health = Q_max(pev->max_health, 1);
-	ALERT(at_aiconsole, "Setting player's max health to %d\n", (int)pev->max_health);
+	ALERT(at_debug, "Setting player's max health to %d\n", (int)pev->max_health);
 
 	if (clampValue && pev->health > pev->max_health)
 	{
@@ -1005,7 +1005,7 @@ TakeDamageResult CBasePlayer::TakeDamage( entvars_t *pevInflictor, entvars_t *pe
 									pFollowingMonster->m_pSchedule && (pFollowingMonster->m_pSchedule->iInterruptMask & bits_COND_NEW_ENEMY) &&
 									pFollowingMonster->IsFollowingPlayer(this) && pFollowingMonster->IRelationship(pAttacker) >= R_DL)
 							{
-								ALERT(at_aiconsole, "%s is gonna attack player's attacker %s\n", STRING(pFollowingMonster->pev->classname), STRING(pAttacker->pev->classname));
+								ALERT(at_debug, "%s is gonna attack player's attacker %s\n", STRING(pFollowingMonster->pev->classname), STRING(pAttacker->pev->classname));
 								pFollowingMonster->SetEnemy(pAttacker);
 								pFollowingMonster->SetConditions( bits_COND_NEW_ENEMY );
 							}
@@ -2721,8 +2721,41 @@ bool CBasePlayer::HasCustomBaseMaxSpeed()
 	return m_playerTemplate && m_playerTemplate->maxSpeed;
 }
 
+void CBasePlayer::TeleportToSinglePlayerSpawnIfOutOfBounds()
+{
+	if (!g_pGameRules || g_pGameRules->IsMultiplayer() || !IsAlive())
+		return;
+
+	if (pev->origin.x > -4096.0f && pev->origin.x < 4096.0f &&
+		pev->origin.y > -4096.0f && pev->origin.y < 4096.0f &&
+		pev->origin.z > -4096.0f && pev->origin.z < 4096.0f)
+	{
+		return;
+	}
+
+	CBaseEntity* pSpot = UTIL_FindEntityByClassname(nullptr, "info_player_start");
+	if (!pSpot)
+	{
+		ALERT(at_warning, "Player is outside world bounds, but no info_player_start exists for recovery\n");
+		return;
+	}
+
+	UTIL_SetOrigin(pev, pSpot->pev->origin + Vector(0, 0, 1));
+	pev->velocity = g_vecZero;
+	pev->basevelocity = g_vecZero;
+	pev->avelocity = g_vecZero;
+	pev->punchangle = g_vecZero;
+	pev->v_angle = g_vecZero;
+	pev->angles = pSpot->pev->angles;
+	pev->fixangle = 1;
+	pev->flags &= ~FL_ONGROUND;
+
+	ALERT(at_console, "Recovered player from outside world bounds at info_player_start\n");
+}
+
 void CBasePlayer::PreThink()
 {
+	TeleportToSinglePlayerSpawnIfOutOfBounds();
 	SetMovementMode();
 
 	int buttonsChanged = ( m_afButtonLast ^ pev->button );	// These buttons have changed this frame
@@ -3082,7 +3115,7 @@ void CBasePlayer::HandleRopePhysics(CRope *pRope)
 	vecAttachPos.z -= FBitSet(pev->flags, FL_DUCKING) ? 12 : 24;
 	if (!SetClosestOriginOnRope(vecAttachPos))
 	{
-		ALERT(at_aiconsole, "Can't set attach pos as origin for player (would lead to stuck)\n");
+		ALERT(at_debug, "Can't set attach pos as origin for player (would lead to stuck)\n");
 		LetGoRope(0.2);
 		return;
 	}
@@ -7230,23 +7263,23 @@ void CBasePlayer::MakeStartFollowing(CFollowingMonster *pMonster)
 		return;
 
 	const int result = pMonster->DoFollowerUse(this, false, USE_ON, true);
-	ALERT(at_aiconsole, "Monster %s at (%g, %g, %g) ",
+	ALERT(at_debug, "Monster %s at (%g, %g, %g) ",
 		  STRING(pMonster->pev->classname), pMonster->pev->origin.x, pMonster->pev->origin.y, pMonster->pev->origin.z);
 	switch (result) {
 	case FOLLOWING_BUSYINSCRIPT:
-		ALERT(at_aiconsole, "can't follow because busy in script\n");
+		ALERT(at_debug, "can't follow because busy in script\n");
 		break;
 	case FOLLOWING_DISCARDED:
-		ALERT(at_aiconsole, "discarded following request\n");
+		ALERT(at_debug, "discarded following request\n");
 		break;
 	case FOLLOWING_DECLINED:
-		ALERT(at_aiconsole, "declined following request\n");
+		ALERT(at_debug, "declined following request\n");
 		break;
 	case FOLLOWING_NOCHANGE:
-		ALERT(at_aiconsole, "is already following a player\n");
+		ALERT(at_debug, "is already following a player\n");
 		break;
 	case FOLLOWING_STARTED:
-		ALERT(at_aiconsole, "started following the player by request\n");
+		ALERT(at_debug, "started following the player by request\n");
 		break;
 	default:
 		break;
@@ -7259,14 +7292,14 @@ void CBasePlayer::MakeStopFollowing(CFollowingMonster *pMonster)
 		return;
 
 	const int result = pMonster->DoFollowerUse(this, false, USE_OFF, true);
-	ALERT(at_aiconsole, "Monster %s at (%g, %g, %g) ",
+	ALERT(at_debug, "Monster %s at (%g, %g, %g) ",
 		  STRING(pMonster->pev->classname), pMonster->pev->origin.x, pMonster->pev->origin.y, pMonster->pev->origin.z);
 	switch (result) {
 	case FOLLOWING_NOCHANGE:
-		ALERT(at_aiconsole, "is already not following a player\n");
+		ALERT(at_debug, "is already not following a player\n");
 		break;
 	case FOLLOWING_STOPPED:
-		ALERT(at_aiconsole, "stopped following the player by request\n");
+		ALERT(at_debug, "stopped following the player by request\n");
 		break;
 	default:
 		break;
@@ -7333,7 +7366,7 @@ bool CBasePlayer::AddMessageBox(CBaseEntity *pMessageBoxEnt, const Vector& origi
 		}
 		else if (m_messageBoxEnts[i] == pMessageBoxEnt)
 		{
-			ALERT(at_aiconsole, "Messagebox with id %d is already added\n", pMessageBoxEnt->entindex());
+			ALERT(at_debug, "Messagebox with id %d is already added\n", pMessageBoxEnt->entindex());
 			return false;
 		}
 	}

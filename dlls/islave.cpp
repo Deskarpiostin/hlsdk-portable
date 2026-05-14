@@ -777,7 +777,7 @@ int CISlave::IRelationship( CBaseEntity *pTarget )
 
 void CISlave::CallForHelp(float flDist, EHANDLE hEnemy, Vector &vecLocation )
 {
-	// ALERT( at_aiconsole, "help " );
+	// ALERT( at_debug, "help " );
 
 	// skip ones not on my netname
 	if( FStringNull( pev->netname ) )
@@ -1062,7 +1062,7 @@ void CISlave::HandleAnimEvent( MonsterEvent_t *pEvent )
 					break;
 				}
 				else {
-					ALERT(at_aiconsole, "Trace failed on revive\n");
+					ALERT(at_debug, "Trace failed on revive\n");
 				}
 			}
 			ClearMultiDamage();
@@ -1074,7 +1074,7 @@ void CISlave::HandleAnimEvent( MonsterEvent_t *pEvent )
 				if (m_Activity == ACT_SPECIAL_ATTACK1 && m_pCine)
 				{
 					coilAttack = true;
-					ALERT(at_aiconsole, "Vort makes coil attack due to the script\n");
+					ALERT(at_debug, "Vort makes coil attack due to the script\n");
 				}
 				// make coil attack on purpose to heal only if two wounded friends around
 				if ( HasFreeEnergy() && IsValidHealTarget(m_hWounded) && IsValidHealTarget(m_hWounded2) &&
@@ -1084,7 +1084,7 @@ void CISlave::HandleAnimEvent( MonsterEvent_t *pEvent )
 						ALERT(at_console, "m_hWounded && m_hWounded2 are the same!\n");
 					}
 					coilAttack = true;
-					ALERT(at_aiconsole, "Vort makes coil attack to heal friends\n");
+					ALERT(at_debug, "Vort makes coil attack to heal friends\n");
 				} else if ( m_hEnemy != 0 && (pev->origin - m_hEnemy->pev->origin).IsLengthLessThanOrEqual(ISLAVE_COIL_ATTACK_RADIUS) && !HasMemory(bits_MEMORY_ISLAVE_LAST_ATTACK_WAS_COIL) ) {
 					coilAttack = true;
 				}
@@ -1105,7 +1105,7 @@ void CISlave::HandleAnimEvent( MonsterEvent_t *pEvent )
 					{
 						if (FClassnameIs(pEntity->pev, STRING(pev->classname))) {
 							if (HealOther(pEntity)) {
-								ALERT(at_aiconsole, "Vort healed friend with coil attack\n");
+								ALERT(at_debug, "Vort healed friend with coil attack\n");
 							}
 						}
 						return false;
@@ -1141,13 +1141,13 @@ void CISlave::HandleAnimEvent( MonsterEvent_t *pEvent )
 							if (healed > 0) // give some health to vortigaunt like in Decay bonus mission
 							{
 								addEnergy -= healed;
-								ALERT(at_aiconsole, "Vortigaunt restored %d health from zapping the %s\n", healed, STRING(pEntity->pev->classname));
+								ALERT(at_debug, "Vortigaunt restored %d health from zapping the %s\n", healed, STRING(pEntity->pev->classname));
 							}
 						}
 						if (addEnergy > 0.0f)
 						{
 							GiveEnergy(addEnergy);
-							ALERT(at_aiconsole, "Vortigaunt gets %g energy from zapping the %s. Energy level: %g\n", addEnergy, STRING(pEntity->pev->classname), m_freeEnergy);
+							ALERT(at_debug, "Vortigaunt gets %g energy from zapping the %s. Energy level: %g\n", addEnergy, STRING(pEntity->pev->classname), m_freeEnergy);
 						}
 					}
 				};
@@ -1297,7 +1297,7 @@ void CISlave::StartTask( Task_t *pTask )
 		
 	case TASK_ISLAVE_HEAL_OR_REVIVE_ATTACK:
 	{
-		ALERT(at_aiconsole, "start TASK_ISLAVE_HEAL_OR_REVIVE_ATTACK\n");
+		ALERT(at_debug, "start TASK_ISLAVE_HEAL_OR_REVIVE_ATTACK\n");
 		m_IdealActivity = ACT_RANGE_ATTACK1;
 		break;
 	}
@@ -1440,7 +1440,7 @@ void CISlave::SpawnFamiliar(const char *entityName, const Vector &origin, int hu
 			}
 		}
 	} else {
-		ALERT(at_aiconsole, "Not enough room to create %s\n", entityName);
+		ALERT(at_debug, "Not enough room to create %s\n", entityName);
 	}
 	m_flSpawnFamiliarTime = gpGlobals->time + ISLAVE_SPAWNFAMILIAR_DELAY;
 }
@@ -1826,7 +1826,7 @@ Schedule_t *CISlave::GetSchedule()
 			if ( HasFreeEnergy() && CheckHealOrReviveTargets()) {
 				SetHealTargetAsTargetEnt();
 				if (CanGoToTargetEnt()) {
-					ALERT(at_aiconsole, "Vort gonna heal or revive friend when idle. State is %s\n", m_MonsterState == MONSTERSTATE_IDLE ? "idle" : "alert");
+					ALERT(at_debug, "Vort gonna heal or revive friend when idle. State is %s\n", m_MonsterState == MONSTERSTATE_IDLE ? "idle" : "alert");
 					return GetScheduleOfType( SCHED_ISLAVE_HEAL_OR_REVIVE );
 				}
 			}
@@ -1867,7 +1867,7 @@ Schedule_t *CISlave::GetScheduleOfType( int Type )
 			SetHealTargetAsTargetEnt();
 			if (CanGoToTargetEnt())
 			{
-				ALERT(at_aiconsole, "Vort gonna heal or revive friends after chase enemy sched fail\n");
+				ALERT(at_debug, "Vort gonna heal or revive friends after chase enemy sched fail\n");
 				return GetScheduleOfType( SCHED_ISLAVE_HEAL_OR_REVIVE );
 			}
 		}
@@ -1884,7 +1884,7 @@ Schedule_t *CISlave::GetScheduleOfType( int Type )
 		return slSlaveCoverAndSummon;
 	case SCHED_ISLAVE_SUMMON_FAMILIAR:
 		if (m_failSchedule == Type) {
-			ALERT(at_aiconsole, "Vort gonna spawn familiar because it was set to failschedule\n");
+			ALERT(at_debug, "Vort gonna spawn familiar because it was set to failschedule\n");
 		}
 		return slSlaveSummon;
 	case SCHED_ISLAVE_HEAL_OR_REVIVE:
@@ -2036,7 +2036,7 @@ CBaseEntity *CISlave::ZapBeam( int side )
 	vecSrc = pev->origin + gpGlobals->v_up * 36;
 	if (IsValidHealTarget(m_hWounded)) {
 		vecAim = ( ( m_hWounded->BodyTarget( vecSrc ) ) - vecSrc ).Normalize();
-		ALERT(at_aiconsole, "Vort shoot friend on purpose to heal\n");
+		ALERT(at_debug, "Vort shoot friend on purpose to heal\n");
 	} else {
 		vecAim = ShootAtEnemy( vecSrc );
 	}
@@ -2060,7 +2060,7 @@ CBaseEntity *CISlave::ZapBeam( int side )
 	{
 		if (IRelationship(pEntity) < R_DL && FClassnameIs(pEntity->pev, STRING(pev->classname))) {
 			if (HealOther(pEntity)) {
-				ALERT(at_aiconsole, "Vortigaunt healed friend with zap attack\n");
+				ALERT(at_debug, "Vortigaunt healed friend with zap attack\n");
 			}
 		} else {
 			pEntity->TraceAttack( pev, pev, DamageInfo{GetSkillValue("islave_dmg_zap"), DMG_SHOCK}, vecAim.Normalize(), &tr );

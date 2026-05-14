@@ -87,7 +87,7 @@ bool CSquadMonster::OccupySlot( int iDesiredSlots )
 				// No, use this bit
 				pSquadLeader->m_afSquadSlots |= iMask;
 				m_iMySlot = iMask;
-				//ALERT( at_aiconsole, "Took slot %d - %d\n", i, m_hSquadLeader->m_afSquadSlots );
+				//ALERT( at_debug, "Took slot %d - %d\n", i, m_hSquadLeader->m_afSquadSlots );
 				return true;
 			}
 		}
@@ -103,7 +103,7 @@ void CSquadMonster::VacateSlot()
 {
 	if( m_iMySlot != bits_NO_SLOT && InSquad() )
 	{
-		//ALERT( at_aiconsole, "Vacated Slot %d - %d\n", m_iMySlot, m_hSquadLeader->m_afSquadSlots );
+		//ALERT( at_debug, "Vacated Slot %d - %d\n", m_iMySlot, m_hSquadLeader->m_afSquadSlots );
 		MySquadLeader()->m_afSquadSlots &= ~m_iMySlot;
 		m_iMySlot = bits_NO_SLOT;
 	}
@@ -515,7 +515,7 @@ void CSquadMonster::StartMonster()
 
 		if( iSquadSize > 1 )
 		{
-			ALERT( at_aiconsole, "Squad of %d monsters formed. Leader is %s\n", iSquadSize, STRING( pev->classname ) );
+			ALERT( at_debug, "Squad of %d monsters formed. Leader is %s\n", iSquadSize, STRING( pev->classname ) );
 		}
 
 		if( IsLeader() )
@@ -558,7 +558,7 @@ bool CSquadMonster::NoFriendlyFire()
 			CBaseMonster* monster = GetMonsterPointer(tr.pHit);
 			if (monster != 0 && FBitSet(monster->pev->flags, FL_MONSTER|FL_CLIENT) && monster->pev->deadflag != DEAD_DEAD && IRelationship(monster) == R_AL)
 			{
-				//ALERT(at_aiconsole, "%s: Ally %s at fire line. Don't shoot!\n", STRING(pev->classname), STRING(monster->pev->classname));
+				//ALERT(at_debug, "%s: Ally %s at fire line. Don't shoot!\n", STRING(pev->classname), STRING(monster->pev->classname));
 				return false;
 			}
 		}
@@ -628,7 +628,7 @@ bool CSquadMonster::NoFriendlyFire()
 				leftPlane.PointInFront( pPlayer->pev->origin ) &&
 				rightPlane.PointInFront( pPlayer->pev->origin ) )
 			{
-				//ALERT(at_aiconsole, "%s: Ally player at fire plane!\n", STRING(pev->classname));
+				//ALERT(at_debug, "%s: Ally player at fire plane!\n", STRING(pev->classname));
 				// player is in the check volume! Don't shoot!
 				if (frontPlane.PointInFront( pPlayer->pev->origin ))
 					return false;
@@ -732,7 +732,7 @@ bool CSquadMonster::AllyMonsterInRange( const Vector &vecLocation, float flDist 
 		CBaseMonster* monster = pEntity->MyMonsterPointer();
 		if (monster != 0 && FBitSet(monster->pev->flags, FL_MONSTER|FL_CLIENT) && monster->pev->deadflag != DEAD_DEAD && IRelationship(monster) == R_AL)
 		{
-			ALERT(at_aiconsole, "%s: Ally %s at search radius.\n", STRING(pev->classname), STRING(monster->pev->classname));
+			ALERT(at_debug, "%s: Ally %s at search radius.\n", STRING(pev->classname), STRING(monster->pev->classname));
 			return true;
 		}
 

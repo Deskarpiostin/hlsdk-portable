@@ -25,7 +25,6 @@
 #include	"ent_templates.h"
 #include	"studio.h"
 #include	"scriptevent.h"
-#include	"ai_debug.h"
 #include	"mod_features.h"
 #include	"skill.h"
 #include	"skilldata.h"
@@ -112,7 +111,6 @@ void OnFreeEntPrivateData(edict_s* pEdict)
 		ClearStringPool();
 		ClearPrecachedModels();
 		ClearPrecachedSounds();
-		ResetScheduleWatchers();
 	}
 }
 
@@ -1504,14 +1502,14 @@ void CBaseEntity::PrecacheChildren(const char *childDefaultClassname, bool rever
 	{
 		if (FStrEq(lastChildrenPrecacher->next->classname, pev->classname) && entTemplate == lastChildrenPrecacher->next->entTemplate)
 		{
-			ALERT(at_aiconsole, "Recursion in children precache detected. Stopping\n");
-			/*ALERT(at_aiconsole, "Recursion loop:\n");
+			ALERT(at_debug, "Recursion in children precache detected. Stopping\n");
+			/*ALERT(at_debug, "Recursion loop:\n");
 
 			ChildrenPrecacher* curChildrenPrecacher = &g_ChildrenPrecacherHead;
 			while(curChildrenPrecacher->next)
 			{
 				curChildrenPrecacher = curChildrenPrecacher->next;
-				ALERT(at_aiconsole, "Classname: '%s'. Entity Template: '%s'\n", STRING(curChildrenPrecacher->classname), FStringNull(curChildrenPrecacher->entTemplateName) ? "" : STRING(curChildrenPrecacher->entTemplateName));
+				ALERT(at_debug, "Classname: '%s'. Entity Template: '%s'\n", STRING(curChildrenPrecacher->classname), FStringNull(curChildrenPrecacher->entTemplateName) ? "" : STRING(curChildrenPrecacher->entTemplateName));
 			}*/
 			return;
 		}

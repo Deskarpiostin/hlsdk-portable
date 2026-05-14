@@ -37,7 +37,6 @@
 #include "common_soundscripts.h"
 #include "visuals_utils.h"
 #include "ent_templates.h"
-#include "ai_debug.h"
 
 extern DLL_GLOBAL Vector		g_vecAttackDir;
 
@@ -874,7 +873,6 @@ void CBaseMonster::UpdateOnRemove()
 			pOwner->DeathNotice( pev );
 		}
 	}
-	RemoveScheduleWatcher(entindex());
 	CBaseToggle::UpdateOnRemove();
 }
 

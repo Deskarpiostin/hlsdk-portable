@@ -1270,7 +1270,7 @@ bool CGargantua::CheckMeleeAttack1( float flDot, float flDist )
 	if (m_checkStompAttackOnly)
 		return false;
 
-	//ALERT( at_aiconsole, "CheckMelee(%f, %f)\n", flDot, flDist );
+	//ALERT( at_debug, "CheckMelee(%f, %f)\n", flDot, flDist );
 	CheckMeleeAttackParams params;
 	params.distance = GARG_ATTACKDIST;
 	return CheckMeleeAttackImpl(flDot, flDist, params, false);
@@ -1279,7 +1279,7 @@ bool CGargantua::CheckMeleeAttack1( float flDot, float flDist )
 // Flame thrower madness!
 bool CGargantua::CheckMeleeAttack2( float flDot, float flDist )
 {
-	//ALERT( at_aiconsole, "CheckMelee(%f, %f)\n", flDot, flDist );
+	//ALERT( at_debug, "CheckMelee(%f, %f)\n", flDot, flDist );
 	if (m_checkStompAttackOnly)
 		return false;
 

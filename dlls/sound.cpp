@@ -1646,8 +1646,8 @@ void SENTENCEG_Init()
 		}
 	}
 
-	ALERT(at_aiconsole, "Number of sentence groups: %d/%d\n", isentencegs, CSENTENCEG_MAX);
-	ALERT(at_aiconsole, "Number of sentences: %d out of max %d (on GoldSource) and %d (on Xash3D)\n", gcallsentences, CVOXFILESENTENCEMAX_GOLDSOURCE_ANNIVERSARY_25, CVOXFILESENTENCEMAX_XASH3D);
+	ALERT(at_debug, "Number of sentence groups: %d/%d\n", isentencegs, CSENTENCEG_MAX);
+	ALERT(at_debug, "Number of sentences: %d out of max %d (on GoldSource) and %d (on Xash3D)\n", gcallsentences, CVOXFILESENTENCEMAX_GOLDSOURCE_ANNIVERSARY_25, CVOXFILESENTENCEMAX_XASH3D);
 
 	g_engfuncs.pfnFreeFile( pMemFile );
 
@@ -1708,7 +1708,7 @@ static bool EMIT_SOUND_DYN_IMPL(edict_t *entity, int channel, const char *sample
 		}
 		else
 		{
-			ALERT( at_aiconsole, "Unable to find %s in sentences.txt\n", sample );
+			ALERT( at_debug, "Unable to find %s in sentences.txt\n", sample );
 			return false;
 		}
 	}

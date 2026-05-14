@@ -248,6 +248,7 @@ public:
 	virtual void Duck();
 	virtual void PreThink();
 	virtual void PostThink();
+	void TeleportToSinglePlayerSpawnIfOutOfBounds();
 	Vector GetGunPosition() override;
 	int TakeHealth(CBaseEntity *pHealer, float flHealth, int bitsDamageType ) override;
 	void SetHealth(int health, bool allowOverheal = false);

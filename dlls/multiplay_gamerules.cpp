@@ -529,7 +529,7 @@ CHalfLifeMultiplay::CHalfLifeMultiplay()
 			{
 				const char* name  = overrideCvar.name.c_str();
 				const char* value = overrideCvar.value.c_str();
-				ALERT(at_aiconsole, "Setting %s to %s\n", name, value);
+				ALERT(at_debug, "Setting %s to %s\n", name, value);
 				CVAR_SET_STRING(name, value);
 			}
 		}

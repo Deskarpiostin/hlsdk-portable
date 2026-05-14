@@ -687,7 +687,7 @@ void CApache::HuntThink()
 			CBaseMonster* monster = pEntity->MyMonsterPointer();
 			if (monster != nullptr && FBitSet(monster->pev->flags, FL_MONSTER|FL_CLIENT) && monster->pev->deadflag != DEAD_DEAD && IRelationship(monster) == R_AL)
 			{
-				ALERT(at_aiconsole, "%s: Ally %s at search radius.\n", STRING(pev->classname), STRING(monster->pev->classname));
+				ALERT(at_debug, "%s: Ally %s at search radius.\n", STRING(pev->classname), STRING(monster->pev->classname));
 				return true;
 			}
 		}

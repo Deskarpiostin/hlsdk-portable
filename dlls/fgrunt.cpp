@@ -3498,7 +3498,7 @@ bool CMedic::Heal()
 		return false;
 
 	m_flHealCharge -= m_hTargetEnt->TakeHealth( this, Q_min(10, m_flHealCharge), DMG_GENERIC );
-	ALERT(at_aiconsole, "Medic grunt heal charge left: %f\n", m_flHealCharge);
+	ALERT(at_debug, "Medic grunt heal charge left: %f\n", m_flHealCharge);
 	m_fHealing = true;
 	return true;
 }
@@ -3568,7 +3568,7 @@ void CMedic::RunTask(Task_t *pTask)
 			if (Heal())
 			{
 				m_IdealActivity = ACT_MELEE_ATTACK2;
-				ALERT(at_aiconsole, "Medic continuing healing\n");
+				ALERT(at_debug, "Medic continuing healing\n");
 			}
 			else
 			{
@@ -3629,7 +3629,7 @@ Schedule_t *CMedic::GetSchedule()
 				if ( TargetDistance() <= 128 )
 				{
 					if ( m_hTargetEnt->pev->health <= m_hTargetEnt->pev->max_health * 0.75 && CheckHealCharge() ) {
-						ALERT(at_aiconsole, "Medic is going to heal a player\n");
+						ALERT(at_debug, "Medic is going to heal a player\n");
 						return GetScheduleOfType(SCHED_MEDIC_HEAL);
 					}
 				}
@@ -3959,7 +3959,7 @@ void CMedic::StartFollowingHealTarget(CBaseEntity *pTarget)
 	ClearConditions( bits_COND_CLIENT_PUSH );
 	ClearSchedule();
 	//ChangeSchedule(GetScheduleOfType(SCHED_MEDIC_HEAL));
-	ALERT(at_aiconsole, "Medic started to follow injured %s\n", STRING(pTarget->pev->classname));
+	ALERT(at_debug, "Medic started to follow injured %s\n", STRING(pTarget->pev->classname));
 }
 
 void CMedic::RestoreTargetEnt()
@@ -3967,7 +3967,7 @@ void CMedic::RestoreTargetEnt()
 	m_fSaidHeal = false;
 	if (m_hLeadingPlayer != 0)
 	{
-		ALERT(at_aiconsole, "Medic restoring old target\n");
+		ALERT(at_debug, "Medic restoring old target\n");
 		m_hTargetEnt = m_hLeadingPlayer;
 		m_hLeadingPlayer = 0;
 

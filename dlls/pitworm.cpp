@@ -1506,7 +1506,7 @@ CPitwormGib *CPitwormGibShooter::CreateGib()
 
 	if (pev->body <= 1)
 	{
-		ALERT(at_aiconsole, "PitwormGibShooter Body is <= 1!\n");
+		ALERT(at_debug, "PitwormGibShooter Body is <= 1!\n");
 	}
 
 	pGib->pev->body = RANDOM_LONG(0, pev->body - 1);

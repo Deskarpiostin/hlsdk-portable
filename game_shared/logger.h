@@ -12,7 +12,7 @@
 #include "extdll.h"
 #include "enginecallback.h"
 #define LOG(...) ALERT(at_console, ##__VA_ARGS__)
-#define LOG_DEV(...) ALERT(at_aiconsole, ##__VA_ARGS__)
+#define LOG_DEV(...) ALERT(at_debug, ##__VA_ARGS__)
 #define LOG_WARNING(...) ALERT(at_warning, ##__VA_ARGS__)
 #define LOG_ERROR(...) ALERT(at_error, ##__VA_ARGS__)
 #else

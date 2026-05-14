@@ -875,7 +875,7 @@ void CTor::StartSummon()
 {
 	Vector summonPos;
 	if (!GetSummonPos(summonPos)) {
-		ALERT(at_aiconsole, "%s: failed to find a summon position\n", STRING(pev->classname));
+		ALERT(at_debug, "%s: failed to find a summon position\n", STRING(pev->classname));
 		return;
 	}
 
@@ -937,7 +937,7 @@ void CTorSummonPoint::SummonThink()
 	}
 	if (removalReason)
 	{
-		ALERT(at_aiconsole, "%s is going to be removed. Reason: %s\n", STRING(pev->classname), removalReason);
+		ALERT(at_debug, "%s is going to be removed. Reason: %s\n", STRING(pev->classname), removalReason);
 		removeSelf();
 		return;
 	}

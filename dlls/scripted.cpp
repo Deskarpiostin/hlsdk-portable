@@ -422,7 +422,7 @@ void CCineMonster::Blocked( CBaseEntity *pOther )
 void CCineMonster::Touch( CBaseEntity *pOther )
 {
 /*
-	ALERT( at_aiconsole, "Cine Touch\n" );
+	ALERT( at_debug, "Cine Touch\n" );
 	if( m_pentTarget && OFFSET( pOther->pev ) == OFFSET( m_pentTarget ) )
 	{
 		CBaseMonster *pTarget = GetClassPtr( (CBaseMonster *)VARS( m_pentTarget ) );
@@ -538,7 +538,7 @@ CBaseMonster *CCineMonster::FindEntity()
 
 	if (!m_cantFindReported && !failedCheckReported && !IsAutoSearch())
 	{
-		ALERT( at_aiconsole, "script \"%s\" can't find monster \"%s\" (nonexistent or out of range)\n", STRING( pev->targetname ), STRING( m_iszEntity ) );
+		ALERT( at_debug, "script \"%s\" can't find monster \"%s\" (nonexistent or out of range)\n", STRING( pev->targetname ), STRING( m_iszEntity ) );
 		m_cantFindReported = true;
 	}
 	return NULL;
@@ -656,7 +656,7 @@ void CCineMonster::PossessEntity()
 				pTarget->pev->flags &= ~FL_ONGROUND;
 			break;
 		}
-		//ALERT( at_aiconsole, "\"%s\" found and used (INT: %s)\n", STRING( pTarget->pev->targetname ), FBitSet( pev->spawnflags, SF_SCRIPT_NOINTERRUPT )? "No" : "Yes" );
+		//ALERT( at_debug, "\"%s\" found and used (INT: %s)\n", STRING( pTarget->pev->targetname ), FBitSet( pev->spawnflags, SF_SCRIPT_NOINTERRUPT )? "No" : "Yes" );
 
 		m_moveFailCount = 0;
 		m_firedOnAnimStart = false;
@@ -691,7 +691,7 @@ bool CCineMonster::TryFindAndPossessEntity()
 	if( (m_hTargetEnt = FindEntity()) != 0 )
 	{
 		PossessEntity();
-		ALERT( at_aiconsole, "script \"%s\" using monster \"%s\"\n", STRING( pev->targetname ), STRING( m_iszEntity ) );
+		ALERT( at_debug, "script \"%s\" using monster \"%s\"\n", STRING( pev->targetname ), STRING( m_iszEntity ) );
 		return true;
 	}
 	else
@@ -810,7 +810,7 @@ bool CCineMonster::StartSequence(CBaseMonster *pTarget, string_t iszSeq, bool co
 //=========================================================
 void CCineMonster::SequenceDone( CBaseMonster *pMonster )
 {
-	//ALERT( at_aiconsole, "Sequence %s finished\n", STRING( m_pCine->m_iszPlay ) );
+	//ALERT( at_debug, "Sequence %s finished\n", STRING( m_pCine->m_iszPlay ) );
 
 	m_iRepeatsLeft = m_iRepeats;
 
@@ -859,7 +859,7 @@ void CCineMonster::FixScriptMonsterSchedule( CBaseMonster *pMonster )
 			pMonster->ChangeSchedule( pMonster->GetScheduleOfType( SCHED_AMBUSH ) );
 			break;
 		default:
-			ALERT( at_aiconsole, "FixScriptMonsterSchedule - no case!\n" );
+			ALERT( at_debug, "FixScriptMonsterSchedule - no case!\n" );
 			pMonster->ClearSchedule();
 			break;
 	}
@@ -965,7 +965,7 @@ void ScriptEntityCancel( edict_t *pentCine, int cancellationReason )
 // find all the cinematic entities with my targetname and stop them from playing
 void CCineMonster::CancelScript(int cancellationReason)
 {
-	//ALERT( at_aiconsole, "Cancelling script: %s\n", STRING( m_iszPlay ) );
+	//ALERT( at_debug, "Cancelling script: %s\n", STRING( m_iszPlay ) );
 
 	if( !pev->targetname )
 	{
@@ -1082,7 +1082,7 @@ void CCineMonster::UpdateOnRemove()
 		CBaseMonster* pMonster = pEntity->MyMonsterPointer();
 		if (pMonster && pMonster->m_pCine == this)
 		{
-			ALERT(at_aiconsole, "%s %s is removed. Calling CineCleanup on %s\n", STRING(pev->classname), STRING(pev->targetname), STRING(pMonster->pev->classname));
+			ALERT(at_debug, "%s %s is removed. Calling CineCleanup on %s\n", STRING(pev->classname), STRING(pev->targetname), STRING(pMonster->pev->classname));
 			pMonster->CineCleanup();
 		}
 	}
@@ -1627,7 +1627,7 @@ bool CScriptedSentence::StartSentence( CBaseToggle *pTarget )
 {
 	if( !pTarget )
 	{
-		ALERT( at_aiconsole, "Not Playing sentence %s\n", STRING( m_iszSentence ) );
+		ALERT( at_debug, "Not Playing sentence %s\n", STRING( m_iszSentence ) );
 		return false;
 	}
 
@@ -1700,7 +1700,7 @@ bool CScriptedSentence::StartSentence( CBaseToggle *pTarget )
 			}
 		}
 	}
-	ALERT( at_aiconsole, "Playing sentence %s (%.1f)\n", STRING( m_iszSentence ), m_flDuration );
+	ALERT( at_debug, "Playing sentence %s (%.1f)\n", STRING( m_iszSentence ), m_flDuration );
 
 	CBaseEntity* pActivator = NULL;
 	if (m_targetActivator == STA_SCRIPT)
@@ -1849,7 +1849,7 @@ int CScriptedSchedule::KnownSchedule() const
 	case SCRIPTED_SCHEDULE_MOVE_TO_SPOT:
 		return SCHED_MOVE_TO_SPOT;
 	default:
-		ALERT(at_aiconsole, "Unknown schedule type for scripted_schedule: %d\n", pev->weapons);
+		ALERT(at_debug, "Unknown schedule type for scripted_schedule: %d\n", pev->weapons);
 		return SCHED_NONE;
 	}
 }
@@ -1902,7 +1902,7 @@ void CScriptedSchedule::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_T
 		if (pev->message) {
 			pSpotEntity = UTIL_FindEntityByTargetname(NULL, STRING(pev->message));
 			if (!pSpotEntity) {
-				ALERT(at_aiconsole, "%s specifies \"%s\" as spot entity, but couldn't find it!\n", STRING(pev->classname), STRING(pev->message));
+				ALERT(at_debug, "%s specifies \"%s\" as spot entity, but couldn't find it!\n", STRING(pev->classname), STRING(pev->message));
 				return;
 			}
 		} else {
@@ -1955,7 +1955,7 @@ void CScriptedSchedule::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_T
 			}
 		}
 	} else {
-		ALERT(at_aiconsole, "%s does not specify the affected monster!\n", STRING(pev->netname));
+		ALERT(at_debug, "%s does not specify the affected monster!\n", STRING(pev->netname));
 	}
 }
 
@@ -2087,7 +2087,7 @@ void CScriptedFollowing::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_
 				UTIL_Remove(this);
 		}
 	} else {
-		ALERT(at_aiconsole, "%s does not specify the affected monster!\n", STRING(pev->classname));
+		ALERT(at_debug, "%s does not specify the affected monster!\n", STRING(pev->classname));
 	}
 }
 

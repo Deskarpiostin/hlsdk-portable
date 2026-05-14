@@ -292,7 +292,7 @@ bool CHoundeye::FValidateHintType( short sHint )
 		}
 	}
 
-	ALERT( at_aiconsole, "%s couldn't validate hint type\n", STRING(pev->classname) );
+	ALERT( at_debug, "%s couldn't validate hint type\n", STRING(pev->classname) );
 	return false;
 }
 
@@ -555,7 +555,7 @@ const Visual* CHoundeye::GetWaveVisual()
 	switch( squadSize )
 	{
 	default:
-		ALERT( at_aiconsole, "Unsupported Houndeye SquadSize %d!\n", squadSize );
+		ALERT( at_debug, "Unsupported Houndeye SquadSize %d!\n", squadSize );
 	case 0:
 	case 1:
 		// solo houndeye - weakest beam
@@ -1525,7 +1525,7 @@ void CDeadHoundeye::Precache()
 			}
 			g_checkedHoundeyeDeadModel = true;
 
-			ALERT(at_aiconsole, "%s model %s\n", HOUNDEYE_DEAD_MODEL, g_hasHoundeyeDeadModel ? "exists" : "doesn't exist");
+			ALERT(at_debug, "%s model %s\n", HOUNDEYE_DEAD_MODEL, g_hasHoundeyeDeadModel ? "exists" : "doesn't exist");
 		}
 
 		if (g_hasHoundeyeDeadModel)

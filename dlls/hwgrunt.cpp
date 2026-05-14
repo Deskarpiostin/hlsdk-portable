@@ -347,7 +347,7 @@ void CHWGrunt::StartTask( Task_t *pTask )
 		}
 		else
 		{
-			ALERT(at_aiconsole, "%s: couldn't find the \"spindown\" animation\n", STRING(pev->classname));
+			ALERT(at_debug, "%s: couldn't find the \"spindown\" animation\n", STRING(pev->classname));
 			TaskComplete();
 		}
 	}
