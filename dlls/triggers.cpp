@@ -2282,6 +2282,8 @@ void CChangeLevel::KeyValue( KeyValueData *pkvd )
 
 extern cvar_t mp_coop;
 
+#define COOP_CHANGELEVEL_MIN_MAP_TIME 15.0f
+
 FILE_GLOBAL char st_szPrevMap[cchMapNameMost];
 
 void CChangeLevel::Spawn()
@@ -2386,6 +2388,12 @@ void CChangeLevel::ChangeLevelNow( CBaseEntity *pActivator, CBaseEntity *pCaller
 	// Don't work in deathmatch
 	if( g_pGameRules->IsMultiplayer() && !g_pGameRules->IsCoOp() )
 		return;
+
+	if( mp_coop.value == 1 && gpGlobals->time < COOP_CHANGELEVEL_MIN_MAP_TIME )
+	{
+		ALERT( at_aiconsole, "Co-op changelevel blocked until %.0f seconds after map start\n", COOP_CHANGELEVEL_MIN_MAP_TIME );
+		return;
+	}
 
 	// Some people are firing these multiple times in a frame, disable
 	if( gpGlobals->time == pev->dmgtime )
