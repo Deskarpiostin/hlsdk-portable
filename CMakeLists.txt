@@ -45,7 +45,6 @@ option(USE_VGUI "Enable VGUI1." OFF)
 option(USE_NOVGUI_MOTD "Prefer non-VGUI MOTD when USE_VGUI is enabled" OFF)
 option(USE_NOVGUI_SCOREBOARD "Prefer non-VGUI Scoreboard when USE_VGUI is enabled" OFF)
 option(USE_VOICEMGR "Enable VOICE MANAGER." OFF)
-option(BUILD_CLIENT "Build client dll" ON)
 option(BUILD_SERVER "Build server dll" ON)
 option(LTO "Enable interprocedural optimization" OFF)
 option(POLLY "Enable pollyhedral optimization" OFF)
@@ -207,17 +206,12 @@ endif()
 
 add_subdirectory(game_shared)
 
-if(BUILD_CLIENT)
-	message(STATUS "Building client enabled")
-	add_subdirectory(cl_dll)
-endif()
-
 if(BUILD_SERVER)
 	message(STATUS "Building server enabled")
 	add_subdirectory(dlls)
 endif()
 
-if(NOT BUILD_SERVER AND NOT BUILD_CLIENT)
+if(NOT BUILD_SERVER )
 	message(FATAL_ERROR "Nothing to build")
 endif()
 
