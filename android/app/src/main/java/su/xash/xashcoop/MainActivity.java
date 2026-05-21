@@ -86,7 +86,7 @@ public class MainActivity extends Activity {
 
         Intent intent = new Intent();
         intent.setComponent(new ComponentName(pkg, "su.xash.engine.XashActivity"));
-        intent.putExtra("gamedir", "valve");
+        intent.putExtra("gamedir", "xashcoop");
         intent.putExtra("gamelibdir", getApplicationInfo().nativeLibraryDir);
         intent.putExtra("argv", argv);
         intent.putExtra("package", getPackageName());

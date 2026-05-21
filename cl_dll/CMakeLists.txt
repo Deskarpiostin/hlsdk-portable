@@ -268,7 +268,14 @@ install(TARGETS ${CLDLL_LIBRARY}
 		WORLD_READ WORLD_EXECUTE)
 
 if(CMAKE_BUILD_TYPE MATCHES "Release" AND NOT WIN32)
-	add_custom_command(TARGET ${CLDLL_LIBRARY}
-			POST_BUILD DEPENDS ${CLDLL_LIBRARY}
-			COMMAND ${CMAKE_STRIP} -s $<TARGET_FILE:${CLDLL_LIBRARY}>)
+    if(APPLE)
+        add_custom_command(TARGET ${CLDLL_LIBRARY}
+            POST_BUILD
+            COMMAND strip -x $<TARGET_FILE:${CLDLL_LIBRARY}>
+            COMMENT "stripping symbols from macOS dylib...")
+    else()
+        add_custom_command(TARGET ${CLDLL_LIBRARY}
+            POST_BUILD
+            COMMAND ${CMAKE_STRIP} -s $<TARGET_FILE:${CLDLL_LIBRARY}>)
+    endif()
 endif()
