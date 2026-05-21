@@ -5,8 +5,8 @@
     <application
         android:forceQueryable="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        tools:targetApi="r">
+        android:label="BetterDM"
+        android:theme="@style/AppTheme">
 
         <meta-data
             android:name="su.xash.engine.gamedir"

@@ -12,9 +12,9 @@ android {
         applicationId 'su.xash.betterdm'
         versionName '1.0'
         versionCode getBuildNum()
-        minSdkVersion 3
-        targetSdk 34
-        compileSdk 34
+        minSdkVersion 21
+        targetSdk 36
+        compileSdk 36
 
         externalNativeBuild {
             cmake {
