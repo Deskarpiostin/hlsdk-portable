@@ -39,6 +39,12 @@
 #define BMOD_CHAN_COUNTDOWN	3
 #define BMOD_CHAN_WEAPON		4
 
-void PrintMessage( CBaseEntity *pEnt, int iChannel, Vector vecColor, Vector vecTime, const char *msg);
+#ifdef CLIENT_DLL
+inline void PrintMessage( CBaseEntity *, int, Vector, Vector, const char * )
+{
+}
+#else
+void PrintMessage( CBaseEntity *pEnt, int iChannel, Vector vecColor, Vector vecTime, const char *msg );
+#endif
 
 #endif
