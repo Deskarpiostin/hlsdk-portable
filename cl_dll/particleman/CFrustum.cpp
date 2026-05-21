@@ -18,7 +18,11 @@
 #ifdef __ANDROID__
 #include <GLES/gl.h>
 #else
+#ifdef __APPLE__
+#include <OpenGL/gl.h>
+#else
 #include <GL/gl.h>
+#endif
 #endif
 
 #include "cl_util.h"

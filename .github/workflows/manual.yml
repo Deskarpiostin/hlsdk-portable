@@ -67,8 +67,8 @@ jobs:
       if: ${{ startsWith(matrix.os, 'ubuntu') && github.event.inputs.usevgui == 'ON' }}
       run: |
         mkdir -p build/cl_dll
-        cp vgui_support/vgui-dev/lib/vgui.so build/cl_dll
-        cp vgui_support/vgui-dev/lib/vgui.so build
+        cp vgui_support/vgui-dev/lib/vgui.so build/cl_dll || true
+        cp vgui_support/vgui-dev/lib/vgui.so build || true
     - name: Build on Linux
       if: startsWith(matrix.os, 'ubuntu')
       run: |
@@ -85,7 +85,7 @@ jobs:
       if: startsWith(matrix.os, 'windows')
       run: |
         cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=${{ github.event.inputs.buildtype }} -DCMAKE_INSTALL_PREFIX="dist" -DUSE_VGUI=${{ github.event.inputs.usevgui }}
-        cmake --build build --target all\
+        cmake --build build --target all
         cmake --build build --target install
 
     - name: Extract branch name
@@ -94,18 +94,26 @@ jobs:
       id: extract_branch
     - name: Extract gamedir
       shell: bash
-      run: echo "gamedir=$(grep build/CMakeCache.txt -Ee 'GAMEDIR:STRING=[a-z]+' | cut -d '=' -f 2)" >> $GITHUB_OUTPUT
+      run: |
+        if [ -f build/CMakeCache.txt ]; then
+          echo "gamedir=$(grep build/CMakeCache.txt -Ee 'GAMEDIR:STRING=[a-z]+' | cut -d '=' -f 2)" >> $GITHUB_OUTPUT
+        else
+          echo "gamedir=valve" >> $GITHUB_OUTPUT
+        fi
       id: extract_gamedir
     - name: Copy fgd to dist dir
       if: ${{ (startsWith(matrix.os, 'ubuntu') && startsWith(matrix.cc, 'gcc')) || startsWith(matrix.os, 'windows') }}
       run: |
-        cp fgd/halflife.fgd dist/${{ steps.extract_gamedir.outputs.gamedir }}/halflife_featureful.fgd
-        cp -r features/ dist/${{ steps.extract_gamedir.outputs.gamedir }}/
+        mkdir -p dist/${{ steps.extract_gamedir.outputs.gamedir }}
+        cp fgd/halflife.fgd dist/${{ steps.extract_gamedir.outputs.gamedir }}/halflife_featureful.fgd || true
+        cp -r features/ dist/${{ steps.extract_gamedir.outputs.gamedir }}/ || true
     - name: Copy pdbs to dist dir
       if: ${{ startsWith(matrix.os, 'windows') && github.event.inputs.buildtype == 'Debug' }}
       run: |
-        copy build/cl_dll/Debug/client.pdb dist/${{ steps.extract_gamedir.outputs.gamedir }}/cl_dlls/
-        copy build/dlls/Debug/hl.pdb dist/${{ steps.extract_gamedir.outputs.gamedir }}/dlls/
+        mkdir -p dist/${{ steps.extract_gamedir.outputs.gamedir }}/cl_dlls
+        mkdir -p dist/${{ steps.extract_gamedir.outputs.gamedir }}/dlls
+        copy build\cl_dll\Debug\client.pdb dist\${{ steps.extract_gamedir.outputs.gamedir }}\cl_dlls\ || copy build\cl_dll\client.pdb dist\${{ steps.extract_gamedir.outputs.gamedir }}\cl_dlls\ || true
+        copy build\dlls\Debug\hl.pdb dist\${{ steps.extract_gamedir.outputs.gamedir }}\dlls\ || copy build\dlls\hl.pdb dist\${{ steps.extract_gamedir.outputs.gamedir }}\dlls\ || true
     - name: Upload linux artifact
       if: startsWith(matrix.os, 'ubuntu')
       uses: actions/upload-artifact@v4
@@ -118,4 +126,3 @@ jobs:
       with:
         name: hlsdk-${{ steps.extract_branch.outputs.branch }}-windows
         path: dist/${{ steps.extract_gamedir.outputs.gamedir }}
-

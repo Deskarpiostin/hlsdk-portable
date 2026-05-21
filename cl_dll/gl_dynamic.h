@@ -26,7 +26,11 @@
 #include <OpenGL/gl.h>
 #endif //TARGET_OS_IOS
 #else
+#ifdef __APPLE__
+#include <OpenGL/gl.h>
+#else
 #include <GL/gl.h>
+#endif
 #endif //__APPLE__
 
 typedef void (APIENTRY *GLAPI_glFogi)(GLenum pname, GLint param);
