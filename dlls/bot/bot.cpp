@@ -57,6 +57,7 @@ respawn_t bot_respawn[32] = {
    {FALSE, BOT_IDLE, "", "", "", NULL}, {FALSE, BOT_IDLE, "", "", "", NULL}};
 
 #define MAX_SKINS 10
+#define MAX_NAMES 15
 
 // indicate which models are currently used for random model allocation
 BOOL skin_used[MAX_SKINS] = {
