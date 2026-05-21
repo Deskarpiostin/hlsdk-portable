@@ -38,6 +38,7 @@ def build(bld):
 		defines += ['NO_VOICEGAMEMGR']
 
 	includes = [
+		'bot',
 		'.',
 		'../common',
 		'../engine',
