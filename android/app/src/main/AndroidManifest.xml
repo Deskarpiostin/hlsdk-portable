@@ -4,9 +4,9 @@
 
     <application
         android:forceQueryable="true"
-        android:icon="@mipmap/ic_launcher_fore"
+        android:icon="@mipmap/ic_launcher"
         android:label="Xash CO-OP"
-        tools:targetApi="r">
+        android:theme="@style/AppTheme">
 
         <meta-data
             android:name="su.xash.engine.gamedir"
@@ -25,22 +25,6 @@
                 <action android:name="su.xash.engine.MOD" />
             </intent-filter>
         </activity>
-	<activity
-		android:name=".VCActivity"
-		android:icon="@mipmap/ic_launcher_vc"
-		android:label="Valve CO-OP"
-		android:roundIcon="@mipmap/ic_launcher_vc"
-		android:exported="true">
-		<intent-filter>
-			<action android:name="android.intent.action.MAIN" />
-
-			<category android:name="android.intent.category.LAUNCHER" />
-		</intent-filter>
-
-		<intent-filter>
-			<action android:name="su.xash.engine.MOD" />
-		</intent-filter>
-	</activity>
     </application>
 
     <queries>
