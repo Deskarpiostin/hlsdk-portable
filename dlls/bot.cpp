@@ -2077,6 +2077,9 @@ void CBot::BotThink( void )
       }
    }
 
+   if (f_move_speed > 0)
+      pev->button |= IN_FORWARD;
+
    if (f_move_speed < 1)
       bot_was_paused = TRUE;
    else

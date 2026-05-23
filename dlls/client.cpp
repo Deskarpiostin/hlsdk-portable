@@ -1366,7 +1366,14 @@ void StartFrame( void )
 
 		// if there are currently less than the maximum number of "players"
 		// then add another bot using the default skill level...
-		if( count < max_bots )
+				int maxbots_cvar = (int)CVAR_GET_FLOAT("maxbots");
+		int bot_cap = (maxbots_cvar < 0) ? max_bots : maxbots_cvar;
+		if( bot_cap > (gpGlobals->maxClients - 1) )
+			bot_cap = gpGlobals->maxClients - 1;
+		if( bot_cap < 0 )
+			bot_cap = 0;
+
+		if( count < bot_cap )
 		{
 			for( i = 0; i < 32; i++ )
 			{

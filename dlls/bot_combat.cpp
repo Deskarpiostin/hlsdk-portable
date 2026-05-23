@@ -395,15 +395,16 @@ BOOL CBot::BotFireWeapon( Vector v_enemy_origin, int weapon_choice, BOOL primary
    int best_weapon = WEAPON_NONE;
    int best_weight = -9999;
 
-   auto consider_weapon = [&]( int weapon_id )
-   {
-      int weight = CBasePlayerItem::ItemInfoArray[weapon_id].iWeight;
-      if (weight > best_weight)
-      {
-         best_weight = weight;
-         best_weapon = weapon_id;
-      }
-   };
+   #define CONSIDER_WEAPON(weapon_id) \
+      do \
+      { \
+         int weight = CBasePlayerItem::ItemInfoArray[(weapon_id)].iWeight; \
+         if (weight > best_weight) \
+         { \
+            best_weight = weight; \
+            best_weapon = (weapon_id); \
+         } \
+      } while (0)
 
    // is it time to check weapons inventory yet?
    if (f_weapon_inventory_time <= gpGlobals->time)
@@ -426,51 +427,51 @@ BOOL CBot::BotFireWeapon( Vector v_enemy_origin, int weapon_choice, BOOL primary
    if (weapon_choice == 0)
    {
       if ((pev->weapons & (1<<WEAPON_CROWBAR)) && (distance <= 40))
-         consider_weapon(WEAPON_CROWBAR);
+         CONSIDER_WEAPON(WEAPON_CROWBAR);
 
       if ((pev->weapons & (1<<WEAPON_HANDGRENADE)) && enemy_below &&
           (distance > 250) && (distance < 750))
-         consider_weapon(WEAPON_HANDGRENADE);
+         CONSIDER_WEAPON(WEAPON_HANDGRENADE);
 
       if ((pev->weapons & (1<<WEAPON_SNARK)) && (pev->waterlevel != 3) &&
           enemy_below && (distance > 150) && (distance < 500))
-         consider_weapon(WEAPON_SNARK);
+         CONSIDER_WEAPON(WEAPON_SNARK);
 
       if ((pev->weapons & (1<<WEAPON_EGON)) && (pev->waterlevel != 3) &&
           (primary_ammo[WEAPON_EGON] > 0))
-         consider_weapon(WEAPON_EGON);
+         CONSIDER_WEAPON(WEAPON_EGON);
 
       if ((pev->weapons & (1<<WEAPON_GAUSS)) && (pev->waterlevel != 3) &&
           (primary_ammo[WEAPON_GAUSS] > 1))
-         consider_weapon(WEAPON_GAUSS);
+         CONSIDER_WEAPON(WEAPON_GAUSS);
 
       if ((pev->weapons & (1<<WEAPON_SHOTGUN)) && (pev->waterlevel != 3) &&
           (distance > 30) && (distance < 150) && (primary_ammo[WEAPON_SHOTGUN] > 0))
-         consider_weapon(WEAPON_SHOTGUN);
+         CONSIDER_WEAPON(WEAPON_SHOTGUN);
 
       if ((pev->weapons & (1<<WEAPON_PYTHON)) && (pev->waterlevel != 3) &&
           (distance > 30) && (distance < 700) && (primary_ammo[WEAPON_PYTHON] > 0))
-         consider_weapon(WEAPON_PYTHON);
+         CONSIDER_WEAPON(WEAPON_PYTHON);
 
       if ((pev->weapons & (1<<WEAPON_HORNETGUN)) && (distance > 30) &&
           (distance < 1000) && (primary_ammo[WEAPON_HORNETGUN] > 0))
-         consider_weapon(WEAPON_HORNETGUN);
+         CONSIDER_WEAPON(WEAPON_HORNETGUN);
 
       if ((pev->weapons & (1<<WEAPON_MP5)) && (pev->waterlevel != 3) &&
           (distance < 250) && (primary_ammo[WEAPON_MP5] > 0))
-         consider_weapon(WEAPON_MP5);
+         CONSIDER_WEAPON(WEAPON_MP5);
 
       if ((pev->weapons & (1<<WEAPON_CROSSBOW)) && (distance > 100) &&
           (distance < 1000) && (primary_ammo[WEAPON_CROSSBOW] > 0))
-         consider_weapon(WEAPON_CROSSBOW);
+         CONSIDER_WEAPON(WEAPON_CROSSBOW);
 
       if ((pev->weapons & (1<<WEAPON_RPG)) && (distance > 300) &&
           (primary_ammo[WEAPON_RPG] > 0))
-         consider_weapon(WEAPON_RPG);
+         CONSIDER_WEAPON(WEAPON_RPG);
 
       if ((pev->weapons & (1<<WEAPON_GLOCK)) && (distance < 1200) &&
           (primary_ammo[WEAPON_GLOCK] > 0))
-         consider_weapon(WEAPON_GLOCK);
+         CONSIDER_WEAPON(WEAPON_GLOCK);
 
       if (best_weapon != WEAPON_NONE)
          weapon_choice = best_weapon;
@@ -935,13 +936,9 @@ void CBot::BotShootAtEnemy( void )
    // aim for the head and/or body
    Vector v_enemy = BotBodyTarget( pBotEnemy ) - GetGunPosition();
 
-   pev->v_angle = UTIL_VecToAngles( v_enemy );
+   Vector target_angles = UTIL_VecToAngles( v_enemy );
 
-   pev->angles.x = 0;
-   pev->angles.y = pev->v_angle.y;
-   pev->angles.z = 0;
-
-   pev->ideal_yaw = pev->v_angle.y;
+   pev->ideal_yaw = target_angles.y;
 
    // check for wrap around of angle...
    if (pev->ideal_yaw > 180)
@@ -949,7 +946,25 @@ void CBot::BotShootAtEnemy( void )
    if (pev->ideal_yaw < -180)
       pev->ideal_yaw += 360;
 
-   pev->v_angle.x = -pev->v_angle.x;  //adjust pitch to point gun
+   target_angles.x = -target_angles.x;  //adjust pitch to point gun
+
+   float max_pitch_step = 10.0f;
+   float pitch_delta = target_angles.x - pev->v_angle.x;
+   if (pitch_delta > max_pitch_step) pitch_delta = max_pitch_step;
+   if (pitch_delta < -max_pitch_step) pitch_delta = -max_pitch_step;
+   pev->v_angle.x += pitch_delta;
+
+   float shake = 0.5f;
+   if (bot_skill == 1) shake = 5.0f;
+   else if (bot_skill == 2) shake = 2.0f;
+   else if (bot_skill == 3) shake = 0.5f;
+
+   pev->v_angle.x += RANDOM_FLOAT(-shake, shake);
+   pev->v_angle.y += RANDOM_FLOAT(-shake, shake);
+
+   pev->angles.x = 0;
+   pev->angles.y = pev->v_angle.y;
+   pev->angles.z = 0;
 
    // is it time to shoot yet?
    if (f_shoot_time <= gpGlobals->time)
