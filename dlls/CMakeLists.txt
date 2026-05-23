@@ -45,9 +45,9 @@ else()
 endif()
 
 set (SVDLL_SOURCES
-	bot/bot.cpp
-	bot/bot_combat.cpp
-	bot/botcam.cpp
+	bot.cpp
+	bot_combat.cpp
+	botcam.cpp
 	BMOD_flyingcrowbar.cpp
 	BMOD_snarkmine.cpp
 	BMOD_messaging.cpp
