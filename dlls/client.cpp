@@ -43,6 +43,7 @@
 // START BOT
 #include "bot.h"
 #include "botcam.h"
+#include "botaim.h"
 
 void BotCreate(const char *skin, const char *name, const char *skill);
 extern int f_Observer;  // flag for observer mode
@@ -999,6 +1000,8 @@ void StartFrame( void )
 	static float previous_time = 0.0;
 	char msg[120];
 	// END BOT
+
+	BotAimStartFrame();
 
 	// START BOT - thanks Jehannum!
 
