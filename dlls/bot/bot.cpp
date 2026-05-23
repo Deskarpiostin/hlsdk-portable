@@ -110,12 +110,12 @@ inline char *GET_INFOBUFFER( edict_t *e )
    return (*g_engfuncs.pfnGetInfoKeyBuffer)( e );
 }
 
-inline char *GET_INFO_KEY_VALUE( const char *infobuffer, const char *key )
+inline char *GET_INFO_KEY_VALUE( char *infobuffer, const char *key )
 {
    return (g_engfuncs.pfnInfoKeyValue( infobuffer, key ));
 }
 
-inline void SET_CLIENT_KEY_VALUE( int clientIndex, const char *infobuffer,
+inline void SET_CLIENT_KEY_VALUE( int clientIndex, char *infobuffer,
                                   const char *key, const char *value )
 {
    (*g_engfuncs.pfnSetClientKeyValue)( clientIndex, infobuffer, key, value );
@@ -2089,4 +2089,3 @@ void CBot::BotThink( void )
                                 gpGlobals->frametime * 1000 );
    // TheFatal - END
 }
-

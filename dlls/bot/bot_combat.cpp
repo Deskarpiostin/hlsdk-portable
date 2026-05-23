@@ -392,6 +392,18 @@ BOOL CBot::BotFireWeapon( Vector v_enemy_origin, int weapon_choice, BOOL primary
 {
    CBasePlayerItem *new_weapon;
    BOOL enemy_below;
+   int best_weapon = WEAPON_NONE;
+   int best_weight = -9999;
+
+   auto consider_weapon = [&]( int weapon_id )
+   {
+      int weight = CBasePlayerItem::ItemInfoArray[weapon_id].iWeight;
+      if (weight > best_weight)
+      {
+         best_weight = weight;
+         best_weapon = weapon_id;
+      }
+   };
 
    // is it time to check weapons inventory yet?
    if (f_weapon_inventory_time <= gpGlobals->time)
@@ -411,11 +423,64 @@ BOOL CBot::BotFireWeapon( Vector v_enemy_origin, int weapon_choice, BOOL primary
    else
       enemy_below = FALSE;
 
+   if (weapon_choice == 0)
+   {
+      if ((pev->weapons & (1<<WEAPON_CROWBAR)) && (distance <= 40))
+         consider_weapon(WEAPON_CROWBAR);
+
+      if ((pev->weapons & (1<<WEAPON_HANDGRENADE)) && enemy_below &&
+          (distance > 250) && (distance < 750))
+         consider_weapon(WEAPON_HANDGRENADE);
+
+      if ((pev->weapons & (1<<WEAPON_SNARK)) && (pev->waterlevel != 3) &&
+          enemy_below && (distance > 150) && (distance < 500))
+         consider_weapon(WEAPON_SNARK);
+
+      if ((pev->weapons & (1<<WEAPON_EGON)) && (pev->waterlevel != 3) &&
+          (primary_ammo[WEAPON_EGON] > 0))
+         consider_weapon(WEAPON_EGON);
+
+      if ((pev->weapons & (1<<WEAPON_GAUSS)) && (pev->waterlevel != 3) &&
+          (primary_ammo[WEAPON_GAUSS] > 1))
+         consider_weapon(WEAPON_GAUSS);
+
+      if ((pev->weapons & (1<<WEAPON_SHOTGUN)) && (pev->waterlevel != 3) &&
+          (distance > 30) && (distance < 150) && (primary_ammo[WEAPON_SHOTGUN] > 0))
+         consider_weapon(WEAPON_SHOTGUN);
+
+      if ((pev->weapons & (1<<WEAPON_PYTHON)) && (pev->waterlevel != 3) &&
+          (distance > 30) && (distance < 700) && (primary_ammo[WEAPON_PYTHON] > 0))
+         consider_weapon(WEAPON_PYTHON);
+
+      if ((pev->weapons & (1<<WEAPON_HORNETGUN)) && (distance > 30) &&
+          (distance < 1000) && (primary_ammo[WEAPON_HORNETGUN] > 0))
+         consider_weapon(WEAPON_HORNETGUN);
+
+      if ((pev->weapons & (1<<WEAPON_MP5)) && (pev->waterlevel != 3) &&
+          (distance < 250) && (primary_ammo[WEAPON_MP5] > 0))
+         consider_weapon(WEAPON_MP5);
+
+      if ((pev->weapons & (1<<WEAPON_CROSSBOW)) && (distance > 100) &&
+          (distance < 1000) && (primary_ammo[WEAPON_CROSSBOW] > 0))
+         consider_weapon(WEAPON_CROSSBOW);
+
+      if ((pev->weapons & (1<<WEAPON_RPG)) && (distance > 300) &&
+          (primary_ammo[WEAPON_RPG] > 0))
+         consider_weapon(WEAPON_RPG);
+
+      if ((pev->weapons & (1<<WEAPON_GLOCK)) && (distance < 1200) &&
+          (primary_ammo[WEAPON_GLOCK] > 0))
+         consider_weapon(WEAPON_GLOCK);
+
+      if (best_weapon != WEAPON_NONE)
+         weapon_choice = best_weapon;
+   }
+
    // if bot is carrying the crowbar...
    if (pev->weapons & (1<<WEAPON_CROWBAR))
    {
-      // if close to enemy, and skill level is 1, 2 or 3, use the crowbar
-      if (((distance <= 40) && (bot_skill <= 2) && (weapon_choice == 0)) ||
+      // if close to enemy, use the crowbar
+      if (((distance <= 40) && (weapon_choice == 0)) ||
           (weapon_choice == WEAPON_CROWBAR))
       {
          new_weapon = weapon_ptr[WEAPON_CROWBAR];
@@ -904,6 +969,5 @@ void CBot::BotShootAtEnemy( void )
    else                     // don't move if close enough
       f_move_speed = 0.0;
 }
-
 
 
