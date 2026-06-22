@@ -170,6 +170,8 @@ void CGauss::PrimaryAttack()
 
 void CGauss::SecondaryAttack()
 {
+	m_flNextSecondaryAttack = gpGlobals->time + 0.1f;
+	m_fInAttack = 0;
 }
 
 //=========================================================
