@@ -1291,6 +1291,7 @@ BOOL CBasePlayer::IsOnLadder( void )
 void CBasePlayer::PlayerDeathThink( void )
 {
 	float flForward;
+	m_fDeadTime = gpGlobals->time;
 
 	if( FBitSet( pev->flags, FL_ONGROUND ) )
 	{
@@ -1340,21 +1341,34 @@ void CBasePlayer::PlayerDeathThink( void )
 	pev->framerate = 0.0;
 
 	BOOL fAnyButtonDown = ( pev->button & ~IN_SCORE );
-
-	// wait for all buttons released
+	
+	// dead and waiting
 	if( pev->deadflag == DEAD_DEAD )
-	{
-		if( fAnyButtonDown )
-			return;
-
-		if( g_pGameRules->FPlayerCanRespawn( this ) )
 		{
-			m_fDeadTime = gpGlobals->time;
-			pev->deadflag = DEAD_RESPAWNABLE;
+		if( allow_spectators.value && !( m_afPhysicsFlags & PFLAG_OBSERVER ) )
+		{
+			if( forcerespawn.value > 0 )
+			{
+				// mp_forcerespawn is enabled: auto-switch to spectator after 5 seconds
+				if( gpGlobals->time >= m_fDeadTime + 5.0f )
+				{
+					StartObserver( pev->origin + Vector( 0, 0, 64 ), pev->v_angle );
+					return;
+				}
+			}
+			else
+			{
+				// mp_forcerespawn is disabled: wait until the player presses any button
+				if( m_afButtonPressed & ~IN_SCORE )
+				{
+					StartObserver( pev->origin + Vector( 0, 0, 64 ), pev->v_angle );
+					return;
+				}
+			}
 		}
 
-		return;
-	}
+	return;
+}
 
 	// if the player has been dead for one second longer than allowed by forcerespawn,
 	// forcerespawn isn't on. Send the player off to an intermission camera until they
