@@ -2827,7 +2827,8 @@ edict_t *EntSelectSpawnPoint( CBaseEntity *pPlayer )
 	}
 	else if( g_pGameRules->IsDeathmatch() )
 	{
-		const char *team = pPlayer->m_szTeamName;
+		CBasePlayer *player = static_cast<CBasePlayer *>(pPlayer);
+		const char *team = player->m_szTeamName;
 		if( !g_pLastSpawn )
 		{
 			nNumRandomSpawnsToTry = 0;
