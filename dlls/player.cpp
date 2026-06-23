@@ -2825,21 +2825,53 @@ edict_t *EntSelectSpawnPoint( CBaseEntity *pPlayer )
 	}
 	else if( g_pGameRules->IsDeathmatch() )
 	{
+		const char *team = pPlayer->_szTeamName;
 		if( !g_pLastSpawn )
 		{
 			nNumRandomSpawnsToTry = 0;
+			nNumRandomSpawnsToTryGordon = 0;
+			nNumRandomSpawnsToTryScientist = 0;
 			CBaseEntity* pEnt = 0;
-
-			while( ( pEnt = UTIL_FindEntityByClassname( pEnt, "info_player_deathmatch" )))
+			if (!stricmp(team, "gordon"))
+			{
+				while( ( pEnt = UTIL_FindEntityByClassname( pEnt, "info_player_gordon" )))
+				nNumRandomSpawnsToTryGordon++;
+    		}
+   			else if (!stricmp(team, "scientist"))
+    		{
+				while( ( pEnt = UTIL_FindEntityByClassname( pEnt, "info_player_scientist" )))
+				nNumRandomSpawnsToTryScientist++;
+			}
+			else
+			{
+				while( ( pEnt = UTIL_FindEntityByClassname( pEnt, "info_player_deathmatch" )))
 				nNumRandomSpawnsToTry++;
+			}
 		}
 
 		pSpot = g_pLastSpawn;
 		// Randomize the start spot
-		for( int i = RANDOM_LONG( 1, nNumRandomSpawnsToTry - 1 ); i > 0; i-- )
-			pSpot = UTIL_FindEntityByClassname( pSpot, "info_player_deathmatch" );
-		if( FNullEnt( pSpot ) )  // skip over the null point
-			pSpot = UTIL_FindEntityByClassname( pSpot, "info_player_deathmatch" );
+		if (!strcmp(team, "gordon"))
+		{
+        	for( int i = RANDOM_LONG( 1, nNumRandomSpawnsToTryGordon - 1 ); i > 0; i-- )
+				pSpot = UTIL_FindEntityByClassname( pSpot, "info_player_gordon" );
+			if( FNullEnt( pSpot ) )  // skip over the null point
+				pSpot = UTIL_FindEntityByClassname( pSpot, "info_player_gordon" );
+    	}
+ 		else if (!strcmp(team, "scientist"))
+    	{
+        	for( int i = RANDOM_LONG( 1, nNumRandomSpawnsToTryScientist - 1 ); i > 0; i-- )
+				pSpot = UTIL_FindEntityByClassname( pSpot, "info_player_scientist" );
+			if( FNullEnt( pSpot ) )  // skip over the null point
+				pSpot = UTIL_FindEntityByClassname( pSpot, "info_player_scientist" );
+		}
+		else
+		{
+			for( int i = RANDOM_LONG( 1, nNumRandomSpawnsToTry - 1 ); i > 0; i-- )
+				pSpot = UTIL_FindEntityByClassname( pSpot, "info_player_deathmatch" );
+			if( FNullEnt( pSpot ) )  // skip over the null point
+				pSpot = UTIL_FindEntityByClassname( pSpot, "info_player_deathmatch" );
+		}
 
 		CBaseEntity *pFirstSpot = pSpot;
 
