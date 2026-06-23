@@ -1345,7 +1345,7 @@ void CBasePlayer::PlayerDeathThink( void )
 	// dead and waiting
 	if( pev->deadflag == DEAD_DEAD )
 		{
-		if( allow_spectators.value && !( m_afPhysicsFlags & PFLAG_OBSERVER ) )
+		if ((int)CVAR_GET_FLOAT("allow_spectators") && !(m_afPhysicsFlags & PFLAG_OBSERVER))
 		{
 			if( forcerespawn.value > 0 )
 			{
