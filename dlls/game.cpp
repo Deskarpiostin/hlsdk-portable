@@ -30,7 +30,7 @@ cvar_t timeleft		= { "mp_timeleft","0" , FCVAR_SERVER | FCVAR_UNLOGGED };	  // "
 // multiplayer server rules
 cvar_t teamplay		= { "mp_teamplay","1", FCVAR_SERVER };
 cvar_t fraglimit	= { "mp_fraglimit","0", FCVAR_SERVER };
-cvar_t timelimit	= { "mp_timelimit","5", FCVAR_SERVER };
+cvar_t timelimit	= { "mp_timelimit","15", FCVAR_SERVER };
 cvar_t friendlyfire	= { "mp_friendlyfire","0", FCVAR_SERVER };
 cvar_t falldamage	= { "mp_falldamage","1", FCVAR_SERVER };
 cvar_t weaponstay	= { "mp_weaponstay","0", FCVAR_SERVER };
