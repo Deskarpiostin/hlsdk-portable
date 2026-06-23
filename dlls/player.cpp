@@ -2906,7 +2906,7 @@ edict_t *EntSelectSpawnPoint( CBaseEntity *pPlayer )
 			while( ( ent = UTIL_FindEntityInSphere( ent, pSpot->pev->origin, 128 ) ) != NULL )
 			{
 				// if ent is a client, kill em (unless they are ourselves)
-				if( ent->IsPlayer() && !(ent->edict() == player) )
+				if (ent->IsPlayer() && !(ent->edict() == player->edict()))
 					ent->TakeDamage( VARS( INDEXENT( 0 ) ), VARS( INDEXENT( 0 ) ), 300, DMG_GENERIC );
 			}
 			goto ReturnSpot;
