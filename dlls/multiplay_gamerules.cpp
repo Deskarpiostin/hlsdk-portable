@@ -41,9 +41,9 @@ extern int gmsgServerName;
 
 extern int g_teamplay;
 
-#define ITEM_RESPAWN_TIME	30
-#define WEAPON_RESPAWN_TIME	20
-#define AMMO_RESPAWN_TIME	20
+#define ITEM_RESPAWN_TIME	360
+#define WEAPON_RESPAWN_TIME	300
+#define AMMO_RESPAWN_TIME	360
 
 float g_flIntermissionStartTime = 0;
 
@@ -147,7 +147,7 @@ void CHalfLifeMultiplay::RefreshSkillData( void )
 	gSkillData.plrDmgCrowbar = 25;
 
 	// Glock Round
-	gSkillData.plrDmg9MM = 12;
+	gSkillData.plrDmg9MM = 6;
 
 	// 357 Round
 	gSkillData.plrDmg357 = 50;
@@ -165,10 +165,10 @@ void CHalfLifeMultiplay::RefreshSkillData( void )
 	gSkillData.plrDmgCrossbowClient = 20;
 
 	// RPG
-	gSkillData.plrDmgRPG = 120;
+	gSkillData.plrDmgRPG = 80;
 
 	// Egon
-	gSkillData.plrDmgEgonWide = 20;
+	gSkillData.plrDmgEgonWide = 10;
 	gSkillData.plrDmgEgonNarrow = 10;
 
 	// Hand Grendade
@@ -181,7 +181,7 @@ void CHalfLifeMultiplay::RefreshSkillData( void )
 	gSkillData.plrDmgTripmine = 150;
 
 	// hornet
-	gSkillData.plrDmgHornet = 10;
+	gSkillData.plrDmgHornet = 5;
 }
 
 // longest the intermission can last, in seconds
@@ -523,6 +523,7 @@ void CHalfLifeMultiplay::PlayerSpawn( CBasePlayer *pPlayer )
 	BOOL		addDefault;
 	CBaseEntity	*pWeaponEntity = NULL;
 	int 		iOldAutoWepSwitch;
+	const char *team = pPlayer->m_szTeamName;
 
 	iOldAutoWepSwitch = pPlayer->m_iAutoWepSwitch;
 
@@ -539,9 +540,13 @@ void CHalfLifeMultiplay::PlayerSpawn( CBasePlayer *pPlayer )
 
 	if( addDefault )
 	{
-		pPlayer->GiveNamedItem( "weapon_crowbar" );
-		pPlayer->GiveNamedItem( "weapon_9mmhandgun" );
-		pPlayer->GiveAmmo( 68, "9mm", _9MM_MAX_CARRY );// 4 full reloads
+		if(!strcmp(team, "gordon"))
+		{
+			pPlayer->GiveNamedItem( "weapon_crowbar" );
+			pPlayer->GiveNamedItem( "weapon_9mmhandgun" );
+			pPlayer->GiveNamedItem( "weapon_9mmAR" );
+			pPlayer->GiveAmmo( 150, "9mm", _9MM_MAX_CARRY );
+		}
 	}
 
 	pPlayer->m_iAutoWepSwitch = iOldAutoWepSwitch;
@@ -551,7 +556,8 @@ void CHalfLifeMultiplay::PlayerSpawn( CBasePlayer *pPlayer )
 //=========================================================
 BOOL CHalfLifeMultiplay::FPlayerCanRespawn( CBasePlayer *pPlayer )
 {
-	return TRUE;
+	// in round based games, it's better to disable respawning ability
+	return FALSE;
 }
 
 //=========================================================
