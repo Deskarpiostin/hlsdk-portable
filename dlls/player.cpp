@@ -2810,6 +2810,8 @@ edict_t *EntSelectSpawnPoint( CBaseEntity *pPlayer )
 	edict_t *player;
 
 	int nNumRandomSpawnsToTry = 10;
+	int nNumRandomSpawnsToTryGordon = 0;
+	int nNumRandomSpawnsToTryScientist = 0;
 
 	player = pPlayer->edict();
 
@@ -2825,7 +2827,7 @@ edict_t *EntSelectSpawnPoint( CBaseEntity *pPlayer )
 	}
 	else if( g_pGameRules->IsDeathmatch() )
 	{
-		const char *team = pPlayer->_szTeamName;
+		const char *team = pPlayer->m_szTeamName;
 		if( !g_pLastSpawn )
 		{
 			nNumRandomSpawnsToTry = 0;
