@@ -52,6 +52,9 @@ jobs:
           - os: ubuntu-latest
             cc: clang
             cxx: clang++
+          - os: ubuntu-22.04-arm
+            targetos: linux
+            targetarch: arm64
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
