@@ -106,9 +106,9 @@ jobs:
     - name: Build on ARM64 Linux
       if: startsWith(matrix.os, 'ubuntu-22.04-arm')
       run: |
-        schroot -- cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPOLLY=ON -B build -S . -DCMAKE_EXE_LINKER_FLAGS="-Wl,--no-undefined" -DCMAKE_INSTALL_PREFIX="$PWD/dist"
-        schroot -- cmake --build build --target all
-        schroot -- cmake --build build --target install
+        cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPOLLY=ON -B build -S . -DCMAKE_EXE_LINKER_FLAGS="-Wl,--no-undefined" -DCMAKE_INSTALL_PREFIX="$PWD/dist"
+        cmake --build build --target all
+        cmake --build build --target install
 
     - name: Set developer command prompt for Windows x86
       if: startsWith(matrix.os, 'windows')
