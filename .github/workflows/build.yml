@@ -89,13 +89,13 @@ jobs:
         sudo sed -i 's/groups=sudo/groups=adm/g' /etc/schroot/chroot.d/steamrt_scout_i386.conf
 
     - name: Build on Linux
-      if: startsWith(matrix.os, 'ubuntu')
+      if: startsWith(matrix.os, 'ubuntu-latest')
       run: |
         schroot --chroot steamrt_scout_i386 -- cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPOLLY=ON -B build -S . -DCMAKE_EXE_LINKER_FLAGS="-Wl,--no-undefined" -DCMAKE_INSTALL_PREFIX="$PWD/dist"
         schroot --chroot steamrt_scout_i386 -- cmake --build build --target all
         schroot --chroot steamrt_scout_i386 -- cmake --build build --target install
     - name: Build on Linux with vgui
-      if: startsWith(matrix.os, 'ubuntu-22.04-arm') && startsWith(matrix.cc, 'gcc')
+      if: startsWith(matrix.os, 'ubuntu-latest') && startsWith(matrix.cc, 'gcc')
       run: |
         schroot --chroot steamrt_scout_i386 -- cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPOLLY=ON -B build-vgui -S . -DCMAKE_EXE_LINKER_FLAGS="-Wl,--no-undefined" -DUSE_VGUI=ON -DCMAKE_INSTALL_PREFIX="$PWD/dist-vgui"
         cp vgui_support/vgui-dev/lib/vgui.so build-vgui/cl_dll
@@ -104,7 +104,7 @@ jobs:
         schroot --chroot steamrt_scout_i386 -- cmake --build build-vgui --target install
 
     - name: Build on ARM64 Linux
-      if: startsWith(matrix.os, 'ubuntu')
+      if: startsWith(matrix.os, 'ubuntu-22.04-arm')
       run: |
         schroot -- cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPOLLY=ON -B build -S . -DCMAKE_EXE_LINKER_FLAGS="-Wl,--no-undefined" -DCMAKE_INSTALL_PREFIX="$PWD/dist"
         schroot -- cmake --build build --target all
