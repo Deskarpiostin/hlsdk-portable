@@ -73,6 +73,8 @@ typedef enum
 
 #define MAX_ID_RANGE 2048
 #define SBAR_STRING_SIZE 128
+#define MAX_COF_INVENTORY 6
+#define MAX_COF_QUICK_SLOTS 3
 
 enum sbar_data
 {
@@ -122,6 +124,8 @@ public:
 	float				m_flFallVelocity;
 
 	int					m_rgItems[MAX_ITEMS];
+	string_t			m_rgCOFInventory[MAX_COF_INVENTORY];
+	string_t			m_rgCOFQuickSlots[MAX_COF_QUICK_SLOTS];
 	int					m_fKnownItem;		// True when a new item needs to be added
 	int					m_fNewAmmo;			// True when a new item has been added
 
@@ -274,6 +278,21 @@ public:
 	void ItemPreFrame( void );
 	void ItemPostFrame( void );
 	void GiveNamedItem( const char *szName );
+	BOOL COF_GiveInventoryItem( const char *pszName );
+	BOOL COF_AddInventoryItem( const char *pszName );
+	BOOL COF_HasInventoryItem( const char *pszName ) const;
+	BOOL COF_RemoveInventoryItem( int iIndex );
+	void COF_ReconcileInventoryWeapons( void );
+	void COF_SendInventory( void );
+	void COF_PrintInventory( void );
+	void COF_UseInventoryItem( int iIndex );
+	void COF_DropInventoryItem( int iIndex );
+	void COF_CombineInventoryItems( int iFirst, int iSecond );
+	void COF_DualWieldInventoryItems( int iFirst, int iSecond );
+	void COF_SendQuickSlot( int iQuickSlot );
+	void COF_SendQuickSlots( void );
+	void COF_SetQuickSlot( int iQuickSlot, int iInventoryIndex );
+	void COF_UseQuickSlot( int iQuickSlot );
 	void EnableControl(BOOL fControl);
 
 	int  GiveAmmo( int iAmount, const char *szName, int iMax );

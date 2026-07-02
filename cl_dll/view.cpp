@@ -26,6 +26,7 @@
 #include "shake.h"
 #include "hltv.h"
 #include "view.h"
+#include <string.h>
 
 // Spectator Mode
 extern "C" 
@@ -98,11 +99,16 @@ cvar_t	*scr_ofsz;
 cvar_t	*v_centermove;
 cvar_t	*v_centerspeed;
 
-cvar_t	*cl_bobcycle;
-cvar_t	*cl_bob;
-cvar_t	*cl_bobup;
 cvar_t	*cl_waterdist;
 cvar_t	*cl_chasedist;
+cvar_t	*cl_weapon_inertia;
+cvar_t	*cl_weapon_lag_scale;
+cvar_t	*cl_weapon_lag_speed;
+cvar_t	*cl_weapon_move_scale;
+cvar_t	*cl_weapon_move_speed;
+cvar_t	*cl_camera_inertia;
+cvar_t	*cl_camera_motion_scale;
+cvar_t	*cl_camera_jump_scale;
 
 // These cvars are not registered (so users can't cheat), so set the ->value field directly
 // Register these cvars in V_Init() if needed for easy tweaking
@@ -116,6 +122,426 @@ cvar_t	v_ipitch_level		= {"v_ipitch_level", "0.3", 0, 0.3};
 float	v_idlescale;  // used by TFC for concussion grenade effect
 
 //=============================================================================
+static float V_ClampFloat( float value, float minValue, float maxValue )
+{
+	if( value < minValue )
+		return minValue;
+	if( value > maxValue )
+		return maxValue;
+	return value;
+}
+
+static float V_AngleDelta( float a, float b )
+{
+	float d = a - b;
+	if( d > 180.0f )
+		d -= 360.0f;
+	else if( d < -180.0f )
+		d += 360.0f;
+	return d;
+}
+
+static float V_SpringFloat( float current, float &velocity, float target, float stiffness, float damping, float frametime )
+{
+	if( frametime <= 0.0f )
+		return current;
+
+	velocity += ( ( target - current ) * stiffness - velocity * damping ) * frametime;
+	return current + velocity * frametime;
+}
+
+static float V_ClampSpring( float value, float &velocity, float minValue, float maxValue )
+{
+	const float clamped = V_ClampFloat( value, minValue, maxValue );
+	if( clamped != value )
+		velocity *= 0.25f;
+	return clamped;
+}
+
+struct cof_ladder_view_state_t
+{
+	qboolean active;
+	qboolean resetFrame;
+	char model[128];
+	int modelIndex;
+	struct model_s *modelPtr;
+	int sequence;
+	int stage;
+	int exitSide;
+	float startTime;
+	float duration;
+};
+
+static cof_ladder_view_state_t g_CofLadderView;
+
+void COF_LadderView_Set( int active, const char *pszModel, int iSequence, int iDurationMs, int iStage, int iExitSide )
+{
+	if( !active )
+	{
+		memset( &g_CofLadderView, 0, sizeof( g_CofLadderView ) );
+		return;
+	}
+
+	if( !g_CofLadderView.active || stricmp( g_CofLadderView.model, pszModel ? pszModel : "" ) != 0 )
+	{
+		g_CofLadderView.modelIndex = 0;
+		g_CofLadderView.modelPtr = NULL;
+		strncpy( g_CofLadderView.model, pszModel ? pszModel : "", sizeof( g_CofLadderView.model ) - 1 );
+		g_CofLadderView.model[sizeof( g_CofLadderView.model ) - 1] = '\0';
+	}
+
+	g_CofLadderView.active = true;
+	g_CofLadderView.resetFrame = true;
+	g_CofLadderView.sequence = iSequence;
+	g_CofLadderView.stage = iStage;
+	g_CofLadderView.exitSide = iExitSide;
+	g_CofLadderView.startTime = 0.0f;
+	g_CofLadderView.duration = Q_max( (float)iDurationMs / 1000.0f, 0.05f );
+}
+
+static void COF_LadderView_Apply( struct ref_params_s *pparams, cl_entity_t *view )
+{
+	if( !pparams || !view || !g_CofLadderView.active || !g_CofLadderView.model[0] )
+		return;
+
+	if( g_CofLadderView.modelIndex <= 0 )
+	{
+		g_CofLadderView.modelPtr = gEngfuncs.CL_LoadModel( g_CofLadderView.model, &g_CofLadderView.modelIndex );
+		if( !g_CofLadderView.modelPtr || g_CofLadderView.modelIndex <= 0 )
+			return;
+	}
+
+	if( !g_CofLadderView.modelPtr )
+		g_CofLadderView.modelPtr = IEngineStudio.GetModelByIndex( g_CofLadderView.modelIndex );
+
+	if( !g_CofLadderView.modelPtr )
+		return;
+
+	view->model = g_CofLadderView.modelPtr;
+
+	if( g_CofLadderView.resetFrame || g_CofLadderView.startTime <= 0.0f )
+	{
+		g_CofLadderView.startTime = pparams->time;
+		g_CofLadderView.resetFrame = false;
+		gEngfuncs.pfnWeaponAnim( g_CofLadderView.sequence, 0 );
+	}
+
+	const float flElapsed = Q_max( 0.0f, pparams->time - g_CofLadderView.startTime );
+	float flProgress = g_CofLadderView.duration > 0.0f ? ( flElapsed / g_CofLadderView.duration ) : 1.0f;
+	flProgress = V_ClampFloat( flProgress, 0.0f, 1.0f );
+
+	view->curstate.modelindex = g_CofLadderView.modelIndex;
+	view->curstate.sequence = g_CofLadderView.sequence;
+	view->curstate.frame = flProgress * 255.0f;
+	view->curstate.framerate = 0.0f;
+	view->curstate.animtime = pparams->time;
+	view->curstate.body = 0;
+	view->curstate.colormap = 0;
+	view->curstate.effects &= ~EF_NODRAW;
+	view->curstate.rendermode = kRenderNormal;
+	view->curstate.renderfx = kRenderFxNone;
+	view->curstate.renderamt = 255;
+	view->curstate.rendercolor.r = 255;
+	view->curstate.rendercolor.g = 255;
+	view->curstate.rendercolor.b = 255;
+	view->curstate.scale = 1.0f;
+
+	VectorCopy( view->origin, view->curstate.origin );
+	VectorCopy( view->angles, view->curstate.angles );
+	VectorCopy( view->origin, view->latched.prevorigin );
+	VectorCopy( view->angles, view->latched.prevangles );
+
+	if( g_CofLadderView.stage == 3 && g_CofLadderView.exitSide != 0 )
+	{
+		vec3_t forward, right, up;
+		const float flSideEase = sin( V_ClampFloat( flProgress, 0.0f, 1.0f ) * 3.14159265f );
+		const float flSide = (float)g_CofLadderView.exitSide;
+
+		AngleVectors( pparams->viewangles, forward, right, up );
+		VectorMA( view->origin, flSide * flSideEase * 1.1f, right, view->origin );
+		view->angles[YAW] += flSide * flSideEase * 6.0f;
+		view->angles[ROLL] -= flSide * flSideEase * 4.0f;
+
+		VectorCopy( view->origin, view->curstate.origin );
+		VectorCopy( view->angles, view->curstate.angles );
+		VectorCopy( view->origin, view->latched.prevorigin );
+		VectorCopy( view->angles, view->latched.prevangles );
+	}
+}
+
+void V_ApplyWeaponInertia( struct ref_params_s *pparams, cl_entity_t *view )
+{
+	static qboolean initialized = false;
+	static vec3_t lastAngles;
+	static vec3_t angleOffset;
+	static vec3_t angleVelocity;
+	static vec3_t moveOffset;
+	static vec3_t moveVelocity;
+	static qboolean wasOnGround = true;
+	static float lastVerticalSpeed = 0.0f;
+	static float jumpDrop = 0.0f;
+	static float jumpDropVelocity = 0.0f;
+	static float weaponSwayPhase = 0.0f;
+	static float weaponSwayOffset = 0.0f;
+	static float weaponSwayVelocity = 0.0f;
+	vec3_t forward, right, up;
+	float angleTarget[3];
+	float targetMove[3];
+	float frametime;
+
+	if( !view || !pparams )
+		return;
+
+	if( cl_weapon_inertia && cl_weapon_inertia->value <= 0.0f )
+	{
+		initialized = false;
+		return;
+	}
+
+	frametime = V_ClampFloat( pparams->frametime, 0.0f, 0.05f );
+	if( !initialized || pparams->paused || pparams->health <= 0 || pparams->intermission )
+	{
+		VectorCopy( pparams->viewangles, lastAngles );
+		VectorClear( angleOffset );
+		VectorClear( angleVelocity );
+		VectorClear( moveOffset );
+		VectorClear( moveVelocity );
+		wasOnGround = pparams->onground ? true : false;
+		lastVerticalSpeed = pparams->simvel[2];
+		jumpDrop = 0.0f;
+		jumpDropVelocity = 0.0f;
+		weaponSwayPhase = 0.0f;
+		weaponSwayOffset = 0.0f;
+		weaponSwayVelocity = 0.0f;
+		initialized = true;
+		return;
+	}
+
+	const float lagSpeed = cl_weapon_lag_speed ? Q_max( cl_weapon_lag_speed->value, 0.1f ) : 12.0f;
+	const float lagScale = cl_weapon_lag_scale ? cl_weapon_lag_scale->value : 1.0f;
+	const float moveSpeed = cl_weapon_move_speed ? Q_max( cl_weapon_move_speed->value, 0.1f ) : 10.0f;
+	const float moveScale = cl_weapon_move_scale ? cl_weapon_move_scale->value : 1.0f;
+
+	const float safeFrame = Q_max( frametime, 0.001f );
+	const float yawSpeed = V_ClampFloat( V_AngleDelta( pparams->viewangles[YAW], lastAngles[YAW] ) / safeFrame, -720.0f, 720.0f );
+	const float pitchSpeed = V_ClampFloat( V_AngleDelta( pparams->viewangles[PITCH], lastAngles[PITCH] ) / safeFrame, -560.0f, 560.0f );
+
+	angleTarget[PITCH] = V_ClampFloat( pitchSpeed * 0.030f * lagScale, -16.0f, 16.0f );
+	angleTarget[YAW] = V_ClampFloat( yawSpeed * 0.036f * lagScale, -22.0f, 22.0f );
+	angleTarget[ROLL] = 0.0f;
+
+	const float angleStiffness = lagSpeed * lagSpeed;
+	const float angleDamping = lagSpeed * 1.55f;
+	angleOffset[PITCH] = V_SpringFloat( angleOffset[PITCH], angleVelocity[PITCH], angleTarget[PITCH], angleStiffness, angleDamping, frametime );
+	angleOffset[YAW] = V_SpringFloat( angleOffset[YAW], angleVelocity[YAW], angleTarget[YAW], angleStiffness * 0.65f, angleDamping * 0.72f, frametime );
+
+	angleOffset[PITCH] = V_ClampSpring( angleOffset[PITCH], angleVelocity[PITCH], -18.0f, 18.0f );
+	angleOffset[YAW] = V_ClampSpring( angleOffset[YAW], angleVelocity[YAW], -24.0f, 24.0f );
+
+	AngleVectors( pparams->viewangles, forward, right, up );
+
+	const float forwardSpeed = V_ClampFloat( DotProduct( pparams->simvel, forward ) / 280.0f, -1.0f, 1.0f );
+	const float sideSpeed = V_ClampFloat( DotProduct( pparams->simvel, right ) / 280.0f, -1.0f, 1.0f );
+	const float verticalSpeed = V_ClampFloat( pparams->simvel[2] / 240.0f, -1.0f, 1.0f );
+	const qboolean onGround = pparams->onground ? true : false;
+	const int buttons = pparams->cmd ? pparams->cmd->buttons : 0;
+	const float horizontalSpeed = sqrt( pparams->simvel[0] * pparams->simvel[0] + pparams->simvel[1] * pparams->simvel[1] );
+	const qboolean running = ( buttons & IN_RUN ) && onGround && horizontalSpeed > COF_PLAYER_WALK_SPEED * 0.70f;
+	const float handMoveScale = moveScale * ( running ? 0.68f : 1.0f );
+	const float handAngleScale = running ? 0.82f : 1.0f;
+
+	if( wasOnGround && !onGround )
+	{
+		const float jumpStrength = V_ClampFloat( pparams->simvel[2] / 280.0f, 0.35f, 1.0f );
+		jumpDropVelocity -= 24.0f * jumpStrength;
+	}
+	else if( !wasOnGround && onGround )
+	{
+		const float landStrength = V_ClampFloat( -lastVerticalSpeed / 420.0f, 0.25f, 1.25f );
+		jumpDropVelocity -= 36.0f * landStrength;
+	}
+
+	targetMove[0] = -forwardSpeed * 0.36f * handMoveScale;
+	targetMove[1] = ( -sideSpeed * 0.58f - angleOffset[YAW] * 0.060f ) * handMoveScale;
+	targetMove[2] = ( fabs( sideSpeed ) * -0.10f - fabs( forwardSpeed ) * 0.24f - verticalSpeed * 0.24f + angleOffset[PITCH] * 0.045f ) * handMoveScale;
+
+	const float moveAmount = onGround ? V_ClampFloat( horizontalSpeed / COF_PLAYER_RUN_SPEED, 0.0f, 1.0f ) : 0.0f;
+	if( moveAmount > 0.02f )
+		weaponSwayPhase += frametime * ( running ? 8.4f : 5.8f ) * Q_max( moveAmount, 0.35f );
+
+	const float weaponSwayAmount = moveAmount * ( running ? 0.95f : 0.45f ) * moveScale;
+	const float weaponSwayTarget = sin( weaponSwayPhase ) * weaponSwayAmount;
+	weaponSwayOffset = V_SpringFloat( weaponSwayOffset, weaponSwayVelocity, weaponSwayTarget, 96.0f, 18.0f, frametime );
+	weaponSwayOffset = V_ClampSpring( weaponSwayOffset, weaponSwayVelocity, -1.10f, 1.10f );
+
+	const float moveStiffness = moveSpeed * moveSpeed;
+	const float moveDamping = moveSpeed * 1.80f;
+	for( int i = 0; i < 3; i++ )
+	{
+		moveOffset[i] = V_SpringFloat( moveOffset[i], moveVelocity[i], targetMove[i], moveStiffness, moveDamping, frametime );
+		moveOffset[i] = V_ClampSpring( moveOffset[i], moveVelocity[i], -1.15f, 1.15f );
+	}
+
+	jumpDrop = V_SpringFloat( jumpDrop, jumpDropVelocity, 0.0f, 78.0f, 16.0f, frametime );
+	jumpDrop = V_ClampSpring( jumpDrop, jumpDropVelocity, -2.2f, 0.6f );
+
+	VectorMA( view->origin, moveOffset[0], forward, view->origin );
+	VectorMA( view->origin, moveOffset[1] + weaponSwayOffset, right, view->origin );
+	VectorMA( view->origin, moveOffset[2] + jumpDrop, up, view->origin );
+
+	view->angles[YAW] -= angleOffset[YAW] * 0.14f;
+	view->angles[PITCH] += angleOffset[PITCH] * 0.30f;
+	view->angles[ROLL] += angleOffset[YAW] * 0.26f * handAngleScale - sideSpeed * 1.0f * handMoveScale;
+
+	wasOnGround = onGround;
+	lastVerticalSpeed = pparams->simvel[2];
+	VectorCopy( pparams->viewangles, lastAngles );
+}
+
+void V_ApplyCameraMotionInertia( struct ref_params_s *pparams )
+{
+	static qboolean initialized = false;
+	static qboolean wasOnGround = true;
+	static float lastVerticalSpeed = 0.0f;
+	static float motionPhase = 0.0f;
+	static float runBlend = 0.0f;
+	static float runBlendVelocity = 0.0f;
+	static float jumpOffset = 0.0f;
+	static float jumpVelocity = 0.0f;
+	static float jumpPitch = 0.0f;
+	static float jumpPitchVelocity = 0.0f;
+	static vec3_t motionOffset;
+	static vec3_t motionVelocity;
+	static vec3_t motionAngles;
+	static vec3_t motionAngleVelocity;
+	vec3_t forward, right, up;
+	vec3_t targetOffset;
+	vec3_t targetAngles;
+
+	if( !pparams )
+		return;
+
+	if( cl_camera_inertia && cl_camera_inertia->value <= 0.0f )
+	{
+		initialized = false;
+		return;
+	}
+
+	const float frametime = V_ClampFloat( pparams->frametime, 0.0f, 0.05f );
+	const qboolean reset = !initialized || pparams->paused || pparams->health <= 0 || pparams->intermission || pparams->spectator || CL_IsThirdPerson();
+	const qboolean onGround = pparams->onground ? true : false;
+
+	if( reset )
+	{
+		wasOnGround = onGround;
+		lastVerticalSpeed = pparams->simvel[2];
+		motionPhase = 0.0f;
+		runBlend = 0.0f;
+		runBlendVelocity = 0.0f;
+		jumpOffset = 0.0f;
+		jumpVelocity = 0.0f;
+		jumpPitch = 0.0f;
+		jumpPitchVelocity = 0.0f;
+		VectorClear( motionOffset );
+		VectorClear( motionVelocity );
+		VectorClear( motionAngles );
+		VectorClear( motionAngleVelocity );
+		initialized = true;
+		return;
+	}
+
+	const int buttons = pparams->cmd ? pparams->cmd->buttons : 0;
+	const float motionScale = cl_camera_motion_scale ? cl_camera_motion_scale->value : 1.0f;
+	const float jumpScale = cl_camera_jump_scale ? cl_camera_jump_scale->value : 1.0f;
+	const float horizontalSpeed = sqrt( pparams->simvel[0] * pparams->simvel[0] + pparams->simvel[1] * pparams->simvel[1] );
+	const float moveAmount = V_ClampFloat( horizontalSpeed / COF_PLAYER_RUN_SPEED, 0.0f, 1.0f );
+	const float runRange = Q_max( COF_PLAYER_RUN_SPEED - COF_PLAYER_WALK_SPEED, 1.0f );
+	float runTarget = V_ClampFloat( ( horizontalSpeed - COF_PLAYER_WALK_SPEED ) / runRange, 0.0f, 1.0f );
+
+	if( ( buttons & IN_RUN ) && horizontalSpeed > 90.0f )
+		runTarget = Q_max( runTarget, 0.75f );
+	if( !onGround )
+		runTarget = 0.0f;
+
+	runBlend = V_SpringFloat( runBlend, runBlendVelocity, runTarget, 72.0f, 15.0f, frametime );
+	runBlend = V_ClampSpring( runBlend, runBlendVelocity, 0.0f, 1.0f );
+
+	const float groundedMove = onGround ? moveAmount : 0.0f;
+	const float walkAmount = groundedMove * ( 1.0f - runBlend );
+	const float runAmount = groundedMove * runBlend;
+
+	if( groundedMove > 0.02f )
+		motionPhase += frametime * ( 5.4f + runBlend * 4.2f ) * Q_max( groundedMove, 0.28f );
+
+	AngleVectors( pparams->viewangles, forward, right, up );
+
+	const float forwardSpeed = V_ClampFloat( DotProduct( pparams->simvel, forward ) / COF_PLAYER_RUN_SPEED, -1.0f, 1.0f );
+	const float sideSpeed = V_ClampFloat( DotProduct( pparams->simvel, right ) / COF_PLAYER_RUN_SPEED, -1.0f, 1.0f );
+	const float step = sin( motionPhase );
+	const float step2 = sin( motionPhase * 2.0f );
+	const float step2Cos = cos( motionPhase * 2.0f );
+	const float step3 = sin( motionPhase * 3.35f + 0.6f );
+	const float runShake = runAmount;
+
+	targetOffset[0] = -forwardSpeed * ( walkAmount * 0.018f + runAmount * 0.52f ) * motionScale;
+	targetOffset[1] = ( -sideSpeed * runAmount * 0.76f + step * runAmount * 0.56f ) * motionScale;
+	targetOffset[2] = ( step2 * ( walkAmount * 0.42f + runAmount * 1.84f ) + step3 * runShake * 0.36f ) * motionScale;
+
+	targetAngles[PITCH] = ( step2Cos * walkAmount * 0.32f - forwardSpeed * runAmount * 0.88f + step2Cos * runAmount * 1.24f + step3 * runShake * 0.36f ) * motionScale;
+	targetAngles[YAW] = ( -sideSpeed * runAmount * 0.64f + step3 * runShake * 0.12f ) * motionScale;
+	targetAngles[ROLL] = ( -sideSpeed * runAmount * 3.30f + step * runAmount * 1.10f + step3 * runShake * 0.32f ) * motionScale;
+
+	const float motionSpeed = 8.6f + runBlend * 2.6f;
+	const float motionStiffness = motionSpeed * motionSpeed;
+	const float motionDamping = motionSpeed * 1.85f;
+	for( int i = 0; i < 3; i++ )
+	{
+		motionOffset[i] = V_SpringFloat( motionOffset[i], motionVelocity[i], targetOffset[i], motionStiffness, motionDamping, frametime );
+		motionAngles[i] = V_SpringFloat( motionAngles[i], motionAngleVelocity[i], targetAngles[i], motionStiffness, motionDamping, frametime );
+	}
+
+	motionOffset[0] = V_ClampSpring( motionOffset[0], motionVelocity[0], -1.10f, 0.88f );
+	motionOffset[1] = V_ClampSpring( motionOffset[1], motionVelocity[1], -1.76f, 1.76f );
+	motionOffset[2] = V_ClampSpring( motionOffset[2], motionVelocity[2], -2.40f, 2.44f );
+	motionAngles[PITCH] = V_ClampSpring( motionAngles[PITCH], motionAngleVelocity[PITCH], -2.60f, 2.68f );
+	motionAngles[YAW] = V_ClampSpring( motionAngles[YAW], motionAngleVelocity[YAW], -1.56f, 1.56f );
+	motionAngles[ROLL] = V_ClampSpring( motionAngles[ROLL], motionAngleVelocity[ROLL], -4.30f, 4.30f );
+
+	if( wasOnGround && !onGround )
+	{
+		const float jumpStrength = V_ClampFloat( pparams->simvel[2] / 280.0f, 0.35f, 1.0f );
+		jumpVelocity -= 40.0f * jumpStrength * jumpScale;
+		jumpPitchVelocity += 17.0f * jumpStrength * jumpScale;
+	}
+	else if( !wasOnGround && onGround )
+	{
+		const float landStrength = V_ClampFloat( -lastVerticalSpeed / 430.0f, 0.25f, 1.25f );
+		jumpVelocity -= 72.0f * landStrength * jumpScale;
+		jumpPitchVelocity += 34.0f * landStrength * jumpScale;
+	}
+
+	const float fallAmount = ( !onGround && pparams->simvel[2] < -40.0f ) ? V_ClampFloat( -pparams->simvel[2] / 520.0f, 0.0f, 1.0f ) : 0.0f;
+	const float jumpOffsetTarget = -1.25f * fallAmount * jumpScale;
+	const float jumpPitchTarget = 0.75f * fallAmount * jumpScale;
+	jumpOffset = V_SpringFloat( jumpOffset, jumpVelocity, jumpOffsetTarget, 56.0f, 11.0f, frametime );
+	jumpPitch = V_SpringFloat( jumpPitch, jumpPitchVelocity, jumpPitchTarget, 64.0f, 12.0f, frametime );
+	jumpOffset = V_ClampSpring( jumpOffset, jumpVelocity, -4.8f, 1.5f );
+	jumpPitch = V_ClampSpring( jumpPitch, jumpPitchVelocity, -2.6f, 3.6f );
+
+	VectorMA( pparams->vieworg, motionOffset[0], forward, pparams->vieworg );
+	VectorMA( pparams->vieworg, motionOffset[1], right, pparams->vieworg );
+	VectorMA( pparams->vieworg, motionOffset[2] + jumpOffset, up, pparams->vieworg );
+
+	pparams->viewangles[PITCH] += motionAngles[PITCH] + jumpPitch;
+	pparams->viewangles[YAW] += motionAngles[YAW];
+	pparams->viewangles[ROLL] += motionAngles[ROLL];
+
+	AngleVectors( pparams->viewangles, pparams->forward, pparams->right, pparams->up );
+
+	wasOnGround = onGround;
+	lastVerticalSpeed = pparams->simvel[2];
+}
+
 /*
 void V_NormalizeAngles( float *angles )
 {
@@ -172,49 +598,6 @@ void V_InterpolateAngles( float *start, float *end, float *output, float frac )
 
 	V_NormalizeAngles( output );
 } */
-
-// Quakeworld bob code, this fixes jitters in the mutliplayer since the clock (pparams->time) isn't quite linear
-float V_CalcBob( struct ref_params_s *pparams )
-{
-	static double bobtime;
-	static float bob;
-	float cycle;
-	static float lasttime;
-	vec3_t	vel;
-
-	if( pparams->onground == -1 ||
-		 pparams->time == lasttime )
-	{
-		// just use old value
-		return bob;	
-	}
-
-	lasttime = pparams->time;
-
-	bobtime += pparams->frametime;
-	cycle = bobtime - (int)( bobtime / cl_bobcycle->value ) * cl_bobcycle->value;
-	cycle /= cl_bobcycle->value;
-
-	if( cycle < cl_bobup->value )
-	{
-		cycle = M_PI_F * cycle / cl_bobup->value;
-	}
-	else
-	{
-		cycle = M_PI_F + M_PI_F * ( cycle - cl_bobup->value )/( 1.0f - cl_bobup->value );
-	}
-
-	// bob is proportional to simulated velocity in the xy plane
-	// (don't count Z, or jumping messes it up)
-	VectorCopy( pparams->simvel, vel );
-	vel[2] = 0;
-
-	bob = sqrt( vel[0] * vel[0] + vel[1] * vel[1] ) * cl_bob->value;
-	bob = bob * 0.3f + bob * 0.7f * sin(cycle);
-	bob = Q_min( bob, 4.0f );
-	bob = Q_max( bob, -7.0f );
-	return bob;
-}
 
 /*
 ===============
@@ -413,7 +796,7 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 	cl_entity_t *ent, *view;
 	int i;
 	vec3_t angles;
-	float bob, waterOffset;
+	float waterOffset;
 	static viewinterp_t ViewInterp;
 
 	static float oldz = 0;
@@ -435,13 +818,8 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 	// view is the weapon model (only visible from inside body)
 	view = gEngfuncs.GetViewModel();
 
-	// transform the view offset by the model's matrix to get the offset from
-	// model origin for the view
-	bob = V_CalcBob( pparams );
-
 	// refresh position
 	VectorCopy( pparams->simorg, pparams->vieworg );
-	pparams->vieworg[2] += bob ;
 	VectorAdd( pparams->vieworg, pparams->viewheight, pparams->vieworg );
 
 	if( pparams->health <= 0 )
@@ -549,6 +927,8 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 		}
 	}
 
+	V_ApplyCameraMotionInertia( pparams );
+
 	// Treating cam_ofs[2] as the distance
 	if( CL_IsThirdPerson() )
 	{
@@ -590,17 +970,6 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 	// Let the viewmodel shake at about 10% of the amplitude
 	gEngfuncs.V_ApplyShake( view->origin, view->angles, 0.9f );
 
-	for( i = 0; i < 3; i++ )
-	{
-		view->origin[i] += bob * 0.4f * pparams->forward[i];
-	}
-	view->origin[2] += bob;
-
-	// throw in a little tilt.
-	view->angles[YAW] -= bob * 0.5f;
-	view->angles[ROLL] -= bob * 1.0f;
-	view->angles[PITCH] -= bob * 0.3f;
-
 	// pushing the view origin down off of the same X/Z plane as the ent's origin will give the
 	// gun a very nice 'shifting' effect when the player looks up/down. If there is a problem
 	// with view model distortion, this may be a cause. (SJB). 
@@ -624,6 +993,9 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 	{
 		view->origin[2] += 0.5f;
 	}
+
+	V_ApplyWeaponInertia( pparams, view );
+	COF_LadderView_Apply( pparams, view );
 
 	// Add in the punchangle, if any
 	VectorAdd( pparams->viewangles, pparams->punchangle, pparams->viewangles );
@@ -1252,8 +1624,7 @@ void V_GetInEyePos( int target, float *origin, float *angles )
 	else if( ent->curstate.usehull == 1 )
 		origin[2] += 12.0f; // VEC_DUCK_VIEW;
 	else
-		// exacty eye position can't be caluculated since it depends on
-		// client values like cl_bobcycle, this offset matches the default values
+		// Exact eye position is not available here, so use the standing view height.
 		origin[2] += 28.0f; // DEFAULT_VIEWHEIGHT
 }
 
@@ -1610,11 +1981,16 @@ void V_Init( void )
 	v_centermove = gEngfuncs.pfnRegisterVariable( "v_centermove", "0.15", 0 );
 	v_centerspeed = gEngfuncs.pfnRegisterVariable( "v_centerspeed","500", 0 );
 
-	cl_bobcycle = gEngfuncs.pfnRegisterVariable( "cl_bobcycle","0.8", 0 );// best default for my experimental gun wag (sjb)
-	cl_bob = gEngfuncs.pfnRegisterVariable( "cl_bob","0.01", FCVAR_ARCHIVE );// best default for my experimental gun wag (sjb)
-	cl_bobup = gEngfuncs.pfnRegisterVariable( "cl_bobup","0.5", 0 );
 	cl_waterdist = gEngfuncs.pfnRegisterVariable( "cl_waterdist","4", 0 );
 	cl_chasedist = gEngfuncs.pfnRegisterVariable( "cl_chasedist","112", 0 );
+	cl_weapon_inertia = gEngfuncs.pfnRegisterVariable( "cl_weapon_inertia", "1", FCVAR_ARCHIVE );
+	cl_weapon_lag_scale = gEngfuncs.pfnRegisterVariable( "cl_weapon_lag_scale", "1.2", FCVAR_ARCHIVE );
+	cl_weapon_lag_speed = gEngfuncs.pfnRegisterVariable( "cl_weapon_lag_speed", "7.5", FCVAR_ARCHIVE );
+	cl_weapon_move_scale = gEngfuncs.pfnRegisterVariable( "cl_weapon_move_scale", "1.15", FCVAR_ARCHIVE );
+	cl_weapon_move_speed = gEngfuncs.pfnRegisterVariable( "cl_weapon_move_speed", "8", FCVAR_ARCHIVE );
+	cl_camera_inertia = gEngfuncs.pfnRegisterVariable( "cl_camera_inertia", "1", FCVAR_ARCHIVE );
+	cl_camera_motion_scale = gEngfuncs.pfnRegisterVariable( "cl_camera_motion_scale", "1", FCVAR_ARCHIVE );
+	cl_camera_jump_scale = gEngfuncs.pfnRegisterVariable( "cl_camera_jump_scale", "1", FCVAR_ARCHIVE );
 }
 
 //#define TRACE_TEST	1

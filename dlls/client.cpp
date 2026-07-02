@@ -53,6 +53,7 @@ extern cvar_t allow_spectators;
 extern cvar_t multibyte_only;
 
 extern int g_teamplay;
+extern BOOL COF_TrySkipActiveCutscene( CBasePlayer *pPlayer );
 
 void LinkUserMessages( void );
 
@@ -493,12 +494,96 @@ void ClientCommand( edict_t *pEntity )
 	{
 		GetClassPtr( (CBasePlayer *)pev )->ForceClientDllUpdate(); 
 	}
+	else if( FStrEq( pcmd, "cof_skipcutscene" ) )
+	{
+		COF_TrySkipActiveCutscene( GetClassPtr( (CBasePlayer *)pev ) );
+	}
+	else if( FStrEq( pcmd, "+inventory" ) || FStrEq( pcmd, "inventory" ) || FStrEq( pcmd, "cof_inventory" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_SendInventory();
+		GetClassPtr( (CBasePlayer *)pev )->COF_PrintInventory();
+	}
+	else if( FStrEq( pcmd, "-inventory" ) )
+	{
+		return;
+	}
+	else if( FStrEq( pcmd, "adlib" ) )
+	{
+		// Cry of Fear binds this for co-op ad-lib voice lines.
+		return;
+	}
+	else if( FStrEq( pcmd, "cof_inventory_sync" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_SendInventory();
+	}
+	else if( FStrEq( pcmd, "cof_inv_use" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_UseInventoryItem( atoi( CMD_ARGV( 1 ) ) );
+	}
+	else if( FStrEq( pcmd, "cof_inv_drop" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_DropInventoryItem( atoi( CMD_ARGV( 1 ) ) );
+	}
+	else if( FStrEq( pcmd, "cof_inv_combine" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_CombineInventoryItems( atoi( CMD_ARGV( 1 ) ), atoi( CMD_ARGV( 2 ) ) );
+	}
+	else if( FStrEq( pcmd, "cof_inv_dualwield" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_DualWieldInventoryItems( atoi( CMD_ARGV( 1 ) ), atoi( CMD_ARGV( 2 ) ) );
+	}
+	else if( FStrEq( pcmd, "cof_inv_quickset" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_SetQuickSlot( atoi( CMD_ARGV( 1 ) ), atoi( CMD_ARGV( 2 ) ) );
+	}
+	else if( FStrEq( pcmd, "quickselset1" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_SetQuickSlot( 0, atoi( CMD_ARGV( 1 ) ) - 1 );
+	}
+	else if( FStrEq( pcmd, "quickselset2" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_SetQuickSlot( 1, atoi( CMD_ARGV( 1 ) ) - 1 );
+	}
+	else if( FStrEq( pcmd, "quickselset3" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_SetQuickSlot( 2, atoi( CMD_ARGV( 1 ) ) - 1 );
+	}
+	else if( FStrEq( pcmd, "cof_inv_quickuse" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_UseQuickSlot( atoi( CMD_ARGV( 1 ) ) );
+	}
+	else if( FStrEq( pcmd, "quicksel1" ) || FStrEq( pcmd, "quickselect1" ) || FStrEq( pcmd, "quickslot1" ) || FStrEq( pcmd, "cof_inv_quick1" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_UseQuickSlot( 0 );
+	}
+	else if( FStrEq( pcmd, "quicksel2" ) || FStrEq( pcmd, "quickselect2" ) || FStrEq( pcmd, "quickslot2" ) || FStrEq( pcmd, "cof_inv_quick2" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_UseQuickSlot( 1 );
+	}
+	else if( FStrEq( pcmd, "quicksel3" ) || FStrEq( pcmd, "quickselect3" ) || FStrEq( pcmd, "quickslot3" ) || FStrEq( pcmd, "cof_inv_quick3" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_UseQuickSlot( 2 );
+	}
+	else if( FStrEq( pcmd, "inventoryequip" ) || FStrEq( pcmd, "inventoryuse" ) )
+	{
+		GetClassPtr( (CBasePlayer *)pev )->COF_UseInventoryItem( atoi( CMD_ARGV( 1 ) ) - 1 );
+	}
 	else if( FStrEq(pcmd, "give" ) )
 	{
 		if( g_enable_cheats->value != 0 )
 		{
-			int iszItem = ALLOC_STRING( CMD_ARGV( 1 ) );	// Make a copy of the classname
-			GetClassPtr( (CBasePlayer *)pev )->GiveNamedItem( STRING( iszItem ) );
+			const char *pszItem = CMD_ARGV( 1 );
+			CBasePlayer *pPlayer = GetClassPtr( (CBasePlayer *)pev );
+			const BOOL bTryInventoryItem =
+				strnicmp( pszItem, "inventoryitems/", 15 ) == 0 ||
+				strnicmp( pszItem, "inventoryitems\\", 15 ) == 0 ||
+				( strncmp( pszItem, "weapon_", 7 ) && strncmp( pszItem, "item_", 5 ) && strncmp( pszItem, "ammo_", 5 ) );
+
+			if( !bTryInventoryItem || !pPlayer->COF_GiveInventoryItem( pszItem ) )
+			{
+				int iszItem = ALLOC_STRING( pszItem );	// Make a copy of the classname
+				pPlayer->GiveNamedItem( STRING( iszItem ) );
+			}
 		}
 	}
 	else if( FStrEq( pcmd, "fire" ) )

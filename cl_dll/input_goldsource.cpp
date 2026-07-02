@@ -22,6 +22,7 @@
 #include "in_defs.h"
 #include "keydefs.h"
 #include "view.h"
+#include "cof_ui.h"
 
 #if !XASH_WIN32
 #define ARRAYSIZE(p)		( sizeof(p) /sizeof(p[0]) )
@@ -634,7 +635,7 @@ void GoldSourceInput::IN_MouseEvent (int mstate)
 {
 	int i;
 
-	if ( iMouseInUse || iVisibleMouse )
+	if ( iMouseInUse || ( iVisibleMouse && !COF_UI_IsActive() ) )
 		return;
 
 	// perform button actions
@@ -854,6 +855,13 @@ void GoldSourceInput::IN_MouseMove ( float frametime, usercmd_t *cmd)
 	if ( !iMouseInUse && !gHUD.m_iIntermission && !iVisibleMouse )
 	{
 		IN_GetMouseDelta( &mx, &my );
+
+		if( COF_UI_ConsumeMouseDelta( (float)mx, (float)my ) )
+		{
+			old_mouse_x = 0;
+			old_mouse_y = 0;
+			return;
+		}
 
 		if (m_filter && m_filter->value)
 		{
@@ -1408,11 +1416,7 @@ void GoldSourceInput::IN_JoyMove ( float frametime, usercmd_t *cmd )
 		return;
 	}
 
-	if (in_speed.state & 1)
-		speed = cl_movespeedkey->value;
-	else
-		speed = 1;
-
+	speed = 1;
 	aspeed = speed * frametime;
 
 	// loop through the axes

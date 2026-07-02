@@ -51,6 +51,7 @@ extern void CopyToBodyQue( entvars_t *pev);
 extern void respawn( entvars_t *pev, BOOL fCopyCorpse );
 extern Vector VecBModelOrigin( entvars_t *pevBModel );
 extern edict_t *EntSelectSpawnPoint( CBaseEntity *pPlayer );
+extern BOOL COF_TrySkipActiveCutscene( CBasePlayer *pPlayer );
 
 // the world node graph
 extern CGraph WorldGraph;
@@ -78,6 +79,8 @@ TYPEDESCRIPTION	CBasePlayer::m_playerSaveData[] =
 	DEFINE_FIELD( CBasePlayer, m_afButtonReleased, FIELD_INTEGER ),
 
 	DEFINE_ARRAY( CBasePlayer, m_rgItems, FIELD_INTEGER, MAX_ITEMS ),
+	DEFINE_ARRAY( CBasePlayer, m_rgCOFInventory, FIELD_STRING, MAX_COF_INVENTORY ),
+	DEFINE_ARRAY( CBasePlayer, m_rgCOFQuickSlots, FIELD_STRING, MAX_COF_QUICK_SLOTS ),
 	DEFINE_FIELD( CBasePlayer, m_afPhysicsFlags, FIELD_INTEGER ),
 
 	DEFINE_FIELD( CBasePlayer, m_flTimeStepSound, FIELD_TIME ),
@@ -173,6 +176,10 @@ int gmsgServerName = 0;
 int gmsgAmmoPickup = 0;
 int gmsgWeapPickup = 0;
 int gmsgItemPickup = 0;
+int gmsgCofInvClear = 0;
+int gmsgCofInvItem = 0;
+int gmsgCofInvQuick = 0;
+int gmsgCofLadder = 0;
 int gmsgHideWeapon = 0;
 int gmsgSetCurWeap = 0;
 int gmsgSayText = 0;
@@ -220,6 +227,10 @@ void LinkUserMessages( void )
 	gmsgAmmoPickup = REG_USER_MSG( "AmmoPickup", 2 );
 	gmsgWeapPickup = REG_USER_MSG( "WeapPickup", 1 );
 	gmsgItemPickup = REG_USER_MSG( "ItemPickup", -1 );
+	gmsgCofInvClear = REG_USER_MSG( "CofInvClear", 0 );
+	gmsgCofInvItem = REG_USER_MSG( "CofInvItem", -1 );
+	gmsgCofInvQuick = REG_USER_MSG( "CofInvQuick", -1 );
+	gmsgCofLadder = REG_USER_MSG( "CofLadder", -1 );
 	gmsgHideWeapon = REG_USER_MSG( "HideWeapon", 1 );
 	gmsgSetFOV = REG_USER_MSG( "SetFOV", 1 );
 	gmsgShowMenu = REG_USER_MSG( "ShowMenu", -1 );
@@ -855,9 +866,15 @@ void CBasePlayer::RemoveAllItems( BOOL removeSuit )
 	pev->weaponmodel = 0;
 
 	if( removeSuit )
+	{
 		pev->weapons = 0;
+		memset( m_rgCOFInventory, 0, sizeof( m_rgCOFInventory ) );
+		memset( m_rgCOFQuickSlots, 0, sizeof( m_rgCOFQuickSlots ) );
+	}
 	else
+	{
 		pev->weapons &= ~WEAPON_ALLWEAPONS;
+	}
 
 	// Turn off flashlight
 	if (removeSuit)
@@ -1603,6 +1620,54 @@ void CBasePlayer::PlayerUse( void )
 	}
 	pObject = pClosest;
 
+	if( !pObject && ( m_afButtonPressed & IN_USE ) )
+	{
+		while( ( pObject = UTIL_FindEntityByClassname( pObject, "inter_door" ) ) != NULL )
+		{
+			Vector vecNearest;
+			Vector vecHalfSize;
+
+			if( !( pObject->ObjectCaps() & FCAP_IMPULSE_USE ) )
+				continue;
+
+			vecNearest = ( VecBModelOrigin( pObject->pev ) - ( pev->origin + pev->view_ofs ) );
+			vecHalfSize = pObject->pev->size * 0.5;
+
+			if( vecNearest.x > vecHalfSize.x )
+				vecNearest.x -= vecHalfSize.x;
+			else if( vecNearest.x < -vecHalfSize.x )
+				vecNearest.x += vecHalfSize.x;
+			else
+				vecNearest.x = 0;
+
+			if( vecNearest.y > vecHalfSize.y )
+				vecNearest.y -= vecHalfSize.y;
+			else if( vecNearest.y < -vecHalfSize.y )
+				vecNearest.y += vecHalfSize.y;
+			else
+				vecNearest.y = 0;
+
+			if( vecNearest.z > vecHalfSize.z )
+				vecNearest.z -= vecHalfSize.z;
+			else if( vecNearest.z < -vecHalfSize.z )
+				vecNearest.z += vecHalfSize.z;
+			else
+				vecNearest.z = 0;
+
+			if( vecNearest.Length() > 160.0f )
+				continue;
+
+			flDot = DotProduct( vecNearest.Normalize(), gpGlobals->v_forward );
+			if( flDot > flMaxDot )
+			{
+				pClosest = pObject;
+				flMaxDot = flDot;
+			}
+		}
+
+		pObject = pClosest;
+	}
+
 	// Found an object
 	if( pObject )
 	{
@@ -1883,6 +1948,16 @@ void CBasePlayer::PreThink( void )
 	// UNDONE: Do we need auto-repeat?
 	m_afButtonPressed =  buttonsChanged & pev->button;		// The changed ones still down are "pressed"
 	m_afButtonReleased = buttonsChanged & ( ~pev->button );	// The ones not down are "released"
+
+	if( ( m_afButtonPressed | pev->button ) & ( IN_JUMP | IN_USE ) )
+	{
+		if( COF_TrySkipActiveCutscene( this ) )
+		{
+			pev->button &= ~( IN_JUMP | IN_USE );
+			m_afButtonPressed &= ~( IN_JUMP | IN_USE );
+			m_afButtonReleased &= ~( IN_JUMP | IN_USE );
+		}
+	}
 
 	g_pGameRules->PlayerThink( this );
 
@@ -3113,6 +3188,8 @@ int CBasePlayer::Restore( CRestore &restore )
 	}
 
 	RenewItems();
+	COF_ReconcileInventoryWeapons();
+	m_fInitHUD = TRUE;
 
 #if CLIENT_WEAPONS
 	// HACK:	This variable is saved/restored in CBaseMonster as a time variable, but we're using it
@@ -4036,6 +4113,7 @@ void CBasePlayer::UpdateClientData( void )
 		MESSAGE_END();
 
 		InitStatusBar();
+		COF_SendInventory();
 	}
 
 	if( m_iHideHUD != m_iClientHideHUD )

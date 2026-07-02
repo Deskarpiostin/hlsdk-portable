@@ -70,11 +70,14 @@ set (CLDLL_SOURCES
 	../dlls/handgrenade.cpp
 	../dlls/hornetgun.cpp
 	../dlls/mp5.cpp
+	../dlls/mobile.cpp
+	../dlls/mobile_switchblade.cpp
 	../dlls/python.cpp
 	../dlls/rpg.cpp
 	../dlls/satchel.cpp
 	../dlls/shotgun.cpp
 	../dlls/squeakgrenade.cpp
+	../dlls/switchblade.cpp
 	../dlls/tripmine.cpp
 	../dlls/glock.cpp
 	ev_hldm.cpp
@@ -124,6 +127,8 @@ set (CLDLL_SOURCES
 	tri.cpp
 	util.cpp
 	view.cpp
+	cof_ui.cpp
+	cof_inventory_client.cpp
 	../public/safe_snprintf.c
 )
 
@@ -184,8 +189,16 @@ endif()
 
 if (USE_VGUI)
 	SET(CMAKE_SKIP_RPATH TRUE)
-	link_directories(${CMAKE_SOURCE_DIR}/vgui_support/vgui-dev/lib)
-	include_directories(../vgui_support/vgui-dev/include)
+	if(NOT OPENVGUI_ROOT)
+		message(FATAL_ERROR "USE_VGUI requires OPENVGUI_ROOT. Build through scripts/build-game.ps1 or pass -DOPENVGUI_ROOT.")
+	endif()
+
+	get_filename_component(OPENVGUI_ROOT "${OPENVGUI_ROOT}" ABSOLUTE)
+	if(NOT EXISTS "${OPENVGUI_ROOT}/include/VGUI.h")
+		message(FATAL_ERROR "OPENVGUI_ROOT does not contain include/VGUI.h: ${OPENVGUI_ROOT}")
+	endif()
+
+	include_directories("${OPENVGUI_ROOT}/include")
 else()
 	include_directories(../utils/fake_vgui/include)
 endif()
@@ -205,16 +218,41 @@ if (GOLDSOURCE_SUPPORT)
 endif()
 
 if (USE_VGUI)
-	if (WIN32)
-		add_library(vgui SHARED IMPORTED)
-		set_property(TARGET vgui PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/vgui_support/vgui-dev/lib/win32_vc6/vgui.dll")
-		set_property(TARGET vgui PROPERTY IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/vgui_support/vgui-dev/lib/win32_vc6/vgui.lib")
-		target_link_libraries(${CLDLL_LIBRARY} vgui)
-	elseif(APPLE)
-		target_link_libraries(${CLDLL_LIBRARY} "-Wl,--no-undefined -L${CMAKE_SOURCE_DIR}/vgui_support/vgui-dev/lib vgui.dylib")
-	else()
-		target_link_libraries(${CLDLL_LIBRARY} :vgui.so)
+	if(NOT OPENVGUI_BUILD_DIR)
+		message(FATAL_ERROR "USE_VGUI requires OPENVGUI_BUILD_DIR. Build through scripts/build-game.ps1 or pass -DOPENVGUI_BUILD_DIR.")
 	endif()
+
+	get_filename_component(OPENVGUI_BUILD_DIR "${OPENVGUI_BUILD_DIR}" ABSOLUTE)
+	if(NOT EXISTS "${OPENVGUI_BUILD_DIR}")
+		message(FATAL_ERROR "OPENVGUI_BUILD_DIR does not exist: ${OPENVGUI_BUILD_DIR}")
+	endif()
+
+	add_library(vgui SHARED IMPORTED)
+
+	if (WIN32)
+		set_property(TARGET vgui PROPERTY IMPORTED_LOCATION_DEBUG "${OPENVGUI_BUILD_DIR}/Debug/vgui.dll")
+		set_property(TARGET vgui PROPERTY IMPORTED_IMPLIB_DEBUG "${OPENVGUI_BUILD_DIR}/Debug/vgui.lib")
+		set_property(TARGET vgui PROPERTY IMPORTED_LOCATION_RELEASE "${OPENVGUI_BUILD_DIR}/Release/vgui.dll")
+		set_property(TARGET vgui PROPERTY IMPORTED_IMPLIB_RELEASE "${OPENVGUI_BUILD_DIR}/Release/vgui.lib")
+		set_property(TARGET vgui PROPERTY IMPORTED_LOCATION_RELWITHDEBINFO "${OPENVGUI_BUILD_DIR}/RelWithDebInfo/vgui.dll")
+		set_property(TARGET vgui PROPERTY IMPORTED_IMPLIB_RELWITHDEBINFO "${OPENVGUI_BUILD_DIR}/RelWithDebInfo/vgui.lib")
+		set_property(TARGET vgui PROPERTY IMPORTED_LOCATION_MINSIZEREL "${OPENVGUI_BUILD_DIR}/MinSizeRel/vgui.dll")
+		set_property(TARGET vgui PROPERTY IMPORTED_IMPLIB_MINSIZEREL "${OPENVGUI_BUILD_DIR}/MinSizeRel/vgui.lib")
+	elseif(APPLE)
+		set(OPENVGUI_LIBRARY "${OPENVGUI_BUILD_DIR}/libvgui.dylib")
+		if(NOT EXISTS "${OPENVGUI_LIBRARY}")
+			message(FATAL_ERROR "openvgui library was not found: ${OPENVGUI_LIBRARY}")
+		endif()
+		set_property(TARGET vgui PROPERTY IMPORTED_LOCATION "${OPENVGUI_LIBRARY}")
+	else()
+		set(OPENVGUI_LIBRARY "${OPENVGUI_BUILD_DIR}/libvgui.so")
+		if(NOT EXISTS "${OPENVGUI_LIBRARY}")
+			message(FATAL_ERROR "openvgui library was not found: ${OPENVGUI_LIBRARY}")
+		endif()
+		set_property(TARGET vgui PROPERTY IMPORTED_LOCATION "${OPENVGUI_LIBRARY}")
+	endif()
+
+	target_link_libraries(${CLDLL_LIBRARY} vgui)
 endif()
 
 if(WIN32)

@@ -78,6 +78,9 @@ public:
 #define WEAPON_TRIPMINE			13
 #define	WEAPON_SATCHEL			14
 #define	WEAPON_SNARK			15
+#define WEAPON_MOBILE			16
+#define WEAPON_SWITCHBLADE		17
+#define WEAPON_MOBILE_SWITCHBLADE	18
 
 #define WEAPON_ALLWEAPONS		(~(1<<WEAPON_SUIT))
 
@@ -100,6 +103,9 @@ public:
 #define SNARK_WEIGHT		5
 #define SATCHEL_WEIGHT		-10
 #define TRIPMINE_WEIGHT		-10
+#define MOBILE_WEIGHT		1
+#define SWITCHBLADE_WEIGHT	2
+#define MOBILE_SWITCHBLADE_WEIGHT	3
 
 // weapon clip/carry ammo capacities
 #define URANIUM_MAX_CARRY		100
@@ -219,6 +225,8 @@ public:
 
 	static	TYPEDESCRIPTION m_SaveData[];
 
+	virtual int ObjectCaps( void );
+	virtual void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	virtual int AddToPlayer( CBasePlayer *pPlayer );	// return TRUE if the item you want the item added to the player inventory
 	virtual int AddDuplicate( CBasePlayerItem *pItem ) { return FALSE; }	// return TRUE if you want your duplicate removed from world
 	void EXPORT DestroyItem( void );
@@ -434,6 +442,8 @@ class CWeaponBox : public CBaseEntity
 
 public:
 	void EXPORT Kill ( void );
+	int ObjectCaps( void );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	int		Save( CSave &save );
 	int		Restore( CRestore &restore );
 	static	TYPEDESCRIPTION m_SaveData[];
@@ -518,6 +528,113 @@ public:
 	}
 private:
 	unsigned short m_usCrowbar;
+};
+
+class CMobile : public CBasePlayerWeapon
+{
+public:
+	int Save( CSave &save );
+	int Restore( CRestore &restore );
+	static TYPEDESCRIPTION m_SaveData[];
+
+	void Spawn( void );
+	void Precache( void );
+	int iItemSlot( void ) { return 5; }
+	int GetItemInfo( ItemInfo *p );
+	int AddToPlayer( CBasePlayer *pPlayer );
+
+	BOOL Deploy( void );
+	void Holster( int skiplocal = 0 );
+	void PrimaryAttack( void );
+	void SecondaryAttack( void );
+	void WeaponIdle( void );
+
+	virtual BOOL UseDecrement( void )
+	{
+#if CLIENT_WEAPONS
+		return TRUE;
+#else
+		return FALSE;
+#endif
+	}
+
+private:
+	void ToggleFlashlight( void );
+	void PunchAttack( void );
+
+	BOOL m_fFlashMode;
+};
+
+class CSwitchblade : public CBasePlayerWeapon
+{
+public:
+	int Save( CSave &save );
+	int Restore( CRestore &restore );
+	static TYPEDESCRIPTION m_SaveData[];
+
+	void Spawn( void );
+	void Precache( void );
+	int iItemSlot( void ) { return 1; }
+	int GetItemInfo( ItemInfo *p );
+	int AddToPlayer( CBasePlayer *pPlayer );
+
+	BOOL Deploy( void );
+	void Holster( int skiplocal = 0 );
+	void PrimaryAttack( void );
+	void SecondaryAttack( void );
+	void WeaponIdle( void );
+
+	virtual BOOL UseDecrement( void )
+	{
+#if CLIENT_WEAPONS
+		return TRUE;
+#else
+		return FALSE;
+#endif
+	}
+
+private:
+	void SwitchbladeAttack( BOOL stabMode );
+	void ToggleMode( void );
+	BOOL IsSprinting( void ) const;
+
+	int m_iSwing;
+};
+
+class CMobileSwitchblade : public CBasePlayerWeapon
+{
+public:
+	int Save( CSave &save );
+	int Restore( CRestore &restore );
+	static TYPEDESCRIPTION m_SaveData[];
+
+	void Spawn( void );
+	void Precache( void );
+	int iItemSlot( void ) { return 5; }
+	int GetItemInfo( ItemInfo *p );
+	int AddToPlayer( CBasePlayer *pPlayer );
+
+	BOOL Deploy( void );
+	void Holster( int skiplocal = 0 );
+	void PrimaryAttack( void );
+	void SecondaryAttack( void );
+	void WeaponIdle( void );
+
+	virtual BOOL UseDecrement( void )
+	{
+#if CLIENT_WEAPONS
+		return TRUE;
+#else
+		return FALSE;
+#endif
+	}
+
+private:
+	void ToggleFlashlight( void );
+	void KnifeAttack( void );
+
+	BOOL m_fFlashMode;
+	int m_iSwing;
 };
 
 class CPython : public CBasePlayerWeapon

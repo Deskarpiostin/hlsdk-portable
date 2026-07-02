@@ -27,6 +27,7 @@
 #include "saverestore.h"
 #include "trains.h"			// trigger_camera has train functionality
 #include "gamerules.h"
+#include "shake.h"
 
 #define	SF_TRIGGER_PUSH_START_OFF	2//spawnflag that makes trigger_push spawn turned OFF
 #define SF_TRIGGER_HURT_TARGETONCE	1// Only fire hurt target once
@@ -1902,6 +1903,7 @@ public:
 };
 
 LINK_ENTITY_TO_CLASS( trigger_teleport, CTriggerTeleport )
+LINK_ENTITY_TO_CLASS( trigger_cofteleport, CTriggerTeleport )
 
 void CTriggerTeleport::Spawn( void )
 {
@@ -1911,6 +1913,563 @@ void CTriggerTeleport::Spawn( void )
 }
 
 LINK_ENTITY_TO_CLASS( info_teleport_destination, CPointEntity )
+LINK_ENTITY_TO_CLASS( inter_door_exit, CPointEntity )
+
+static BOOL COF_IsEmptyDoorToken( string_t iszValue )
+{
+	if( FStringNull( iszValue ) )
+		return TRUE;
+
+	const char *pszValue = STRING( iszValue );
+
+	return !pszValue[0] || FStrEq( pszValue, "none" ) || FStrEq( pszValue, "0" );
+}
+
+static void COF_PrecacheSound( string_t iszSound )
+{
+	if( COF_IsEmptyDoorToken( iszSound ) )
+		return;
+
+	const char *pszSound = STRING( iszSound );
+
+	if( strstr( pszSound, ".wav" ) )
+		PRECACHE_SOUND( (char *)pszSound );
+}
+
+static CBaseEntity *COF_FindNamedEntity( const char *pszName )
+{
+	if( !pszName || !pszName[0] || FStrEq( pszName, "none" ) )
+		return NULL;
+
+	return UTIL_FindEntityByString( NULL, "targetname", pszName );
+}
+
+static CBasePlayer *COF_PlayerFromActivator( CBaseEntity *pActivator )
+{
+	if( pActivator && pActivator->IsPlayer() )
+		return (CBasePlayer *)pActivator;
+
+	return (CBasePlayer *)UTIL_PlayerByIndex( 1 );
+}
+
+static BOOL COF_TeleportToTarget( CBaseEntity *pEntity, const char *pszTargetName )
+{
+	if( !pEntity || !pszTargetName || !pszTargetName[0] || FStrEq( pszTargetName, "none" ) )
+		return FALSE;
+
+	CBaseEntity *pTarget = COF_FindNamedEntity( pszTargetName );
+
+	if( !pTarget )
+		return FALSE;
+
+	Vector vecOrigin = pTarget->pev->origin;
+
+	if( pEntity->IsPlayer() )
+		vecOrigin.z -= pEntity->pev->mins.z;
+
+	vecOrigin.z += 1.0f;
+
+	pEntity->pev->flags &= ~FL_ONGROUND;
+	UTIL_SetOrigin( pEntity->pev, vecOrigin );
+
+	pEntity->pev->angles = pTarget->pev->angles;
+	pEntity->pev->v_angle = pTarget->pev->angles;
+	pEntity->pev->fixangle = TRUE;
+	pEntity->pev->velocity = g_vecZero;
+	pEntity->pev->basevelocity = g_vecZero;
+
+	return TRUE;
+}
+
+class CCofTeleport : public CPointEntity
+{
+public:
+	void Spawn( void );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+};
+
+LINK_ENTITY_TO_CLASS( cof_teleport, CCofTeleport )
+
+void CCofTeleport::Spawn( void )
+{
+	SetUse( &CCofTeleport::Use );
+}
+
+void CCofTeleport::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	CBaseEntity *pTeleportee = pActivator;
+
+	if( !pTeleportee || !pTeleportee->IsPlayer() )
+		pTeleportee = UTIL_PlayerByIndex( 1 );
+
+	COF_TeleportToTarget( pTeleportee, STRING( pev->target ) );
+}
+
+class CInterDoor : public CBaseTrigger
+{
+public:
+	void Spawn( void );
+	void Precache( void );
+	void KeyValue( KeyValueData *pkvd );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+	void EXPORT FinishTransition( void );
+	int ObjectCaps( void ) { return ( CBaseTrigger::ObjectCaps() | FCAP_IMPULSE_USE ) & ~FCAP_ACROSS_TRANSITION; }
+
+	virtual int Save( CSave &save );
+	virtual int Restore( CRestore &restore );
+	static TYPEDESCRIPTION m_SaveData[];
+
+	void SetLockedBy( const char *pszLockedBy );
+	BOOL IsLocked( void );
+	void SetEnabled( BOOL enabled );
+	void SetExitTarget( const char *pszTarget );
+
+private:
+	void ActivateDoor( CBasePlayer *pPlayer );
+	void PlayDoorSound( CBaseEntity *pPlayer, string_t iszSound, int channel );
+	void PlayMusic( CBasePlayer *pPlayer );
+
+	string_t m_iszOpenSound;
+	string_t m_iszCloseSound;
+	string_t m_iszLockedSound;
+	string_t m_iszUnlockedSound;
+	string_t m_iszLockedMessage;
+	string_t m_iszUnlockedMessage;
+	string_t m_iszLockedBy;
+	string_t m_iszMusic;
+	string_t m_iszNewLevelSound;
+	float m_flMusicFadeIn;
+	float m_flMusicFadeOut;
+	float m_flNextUseTime;
+	BOOL m_fEnabled;
+	EHANDLE m_hPendingPlayer;
+};
+
+LINK_ENTITY_TO_CLASS( inter_door, CInterDoor )
+
+TYPEDESCRIPTION	CInterDoor::m_SaveData[] =
+{
+	DEFINE_FIELD( CInterDoor, m_iszOpenSound, FIELD_STRING ),
+	DEFINE_FIELD( CInterDoor, m_iszCloseSound, FIELD_STRING ),
+	DEFINE_FIELD( CInterDoor, m_iszLockedSound, FIELD_STRING ),
+	DEFINE_FIELD( CInterDoor, m_iszUnlockedSound, FIELD_STRING ),
+	DEFINE_FIELD( CInterDoor, m_iszLockedMessage, FIELD_STRING ),
+	DEFINE_FIELD( CInterDoor, m_iszUnlockedMessage, FIELD_STRING ),
+	DEFINE_FIELD( CInterDoor, m_iszLockedBy, FIELD_STRING ),
+	DEFINE_FIELD( CInterDoor, m_iszMusic, FIELD_STRING ),
+	DEFINE_FIELD( CInterDoor, m_iszNewLevelSound, FIELD_STRING ),
+	DEFINE_FIELD( CInterDoor, m_flMusicFadeIn, FIELD_FLOAT ),
+	DEFINE_FIELD( CInterDoor, m_flMusicFadeOut, FIELD_FLOAT ),
+	DEFINE_FIELD( CInterDoor, m_flNextUseTime, FIELD_TIME ),
+	DEFINE_FIELD( CInterDoor, m_fEnabled, FIELD_BOOLEAN ),
+	DEFINE_FIELD( CInterDoor, m_hPendingPlayer, FIELD_EHANDLE ),
+};
+
+IMPLEMENT_SAVERESTORE( CInterDoor, CBaseTrigger )
+
+void CInterDoor::Spawn( void )
+{
+	Precache();
+
+	m_fEnabled = !( pev->spawnflags & 4 );
+
+	InitTrigger();
+	SetTouch( NULL );
+	SetUse( &CInterDoor::Use );
+}
+
+void CInterDoor::Precache( void )
+{
+	COF_PrecacheSound( m_iszOpenSound );
+	COF_PrecacheSound( m_iszCloseSound );
+	COF_PrecacheSound( m_iszLockedSound );
+	COF_PrecacheSound( m_iszUnlockedSound );
+	COF_PrecacheSound( m_iszNewLevelSound );
+}
+
+void CInterDoor::KeyValue( KeyValueData *pkvd )
+{
+	if( FStrEq( pkvd->szKeyName, "opensound" ) )
+	{
+		m_iszOpenSound = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "closesound" ) )
+	{
+		m_iszCloseSound = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "lockedsnd" ) )
+	{
+		m_iszLockedSound = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "unlockedsnd" ) )
+	{
+		m_iszUnlockedSound = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "lockedmsg" ) )
+	{
+		m_iszLockedMessage = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "unlockedmsg" ) )
+	{
+		m_iszUnlockedMessage = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "lockedby" ) )
+	{
+		SetLockedBy( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "music" ) )
+	{
+		m_iszMusic = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "musicfadein" ) )
+	{
+		m_flMusicFadeIn = atof( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "musicfadeout" ) )
+	{
+		m_flMusicFadeOut = atof( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "newlevelsnd" ) )
+	{
+		m_iszNewLevelSound = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "enabled" ) )
+	{
+		m_fEnabled = atoi( pkvd->szValue ) != 0;
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "doortype" ) ||
+		FStrEq( pkvd->szKeyName, "silentroom" ) ||
+		FStrEq( pkvd->szKeyName, "useunlock" ) ||
+		FStrEq( pkvd->szKeyName, "usesound" ) ||
+		FStrEq( pkvd->szKeyName, "checkdelay" ) ||
+		FStrEq( pkvd->szKeyName, "propertarget" ) ||
+		FStrEq( pkvd->szKeyName, "movewith" ) )
+	{
+		pkvd->fHandled = TRUE;
+	}
+	else
+		CBaseTrigger::KeyValue( pkvd );
+}
+
+BOOL CInterDoor::IsLocked( void )
+{
+	return !COF_IsEmptyDoorToken( m_iszLockedBy );
+}
+
+void CInterDoor::SetLockedBy( const char *pszLockedBy )
+{
+	if( !pszLockedBy || !pszLockedBy[0] || FStrEq( pszLockedBy, "none" ) || FStrEq( pszLockedBy, "0" ) )
+		m_iszLockedBy = iStringNull;
+	else
+		m_iszLockedBy = ALLOC_STRING( pszLockedBy );
+}
+
+void CInterDoor::SetEnabled( BOOL enabled )
+{
+	m_fEnabled = enabled;
+}
+
+void CInterDoor::SetExitTarget( const char *pszTarget )
+{
+	if( pszTarget && pszTarget[0] )
+		pev->target = ALLOC_STRING( pszTarget );
+}
+
+void CInterDoor::PlayDoorSound( CBaseEntity *pPlayer, string_t iszSound, int channel )
+{
+	if( COF_IsEmptyDoorToken( iszSound ) )
+		return;
+
+	EMIT_SOUND( ENT( pPlayer->pev ), channel, STRING( iszSound ), 1.0f, ATTN_NORM );
+}
+
+void CInterDoor::PlayMusic( CBasePlayer *pPlayer )
+{
+	if( !pPlayer || COF_IsEmptyDoorToken( m_iszMusic ) )
+		return;
+
+	CLIENT_COMMAND( pPlayer->edict(), "mp3 play mp3/%s\n", STRING( m_iszMusic ) );
+}
+
+void CInterDoor::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	CBasePlayer *pPlayer = COF_PlayerFromActivator( pActivator );
+
+	if( !pPlayer || !pPlayer->IsAlive() )
+		return;
+
+	if( gpGlobals->time < m_flNextUseTime )
+		return;
+
+	m_flNextUseTime = gpGlobals->time + 0.75f;
+
+	BOOL fMasterTriggered = UTIL_IsMasterTriggered( m_sMaster, pPlayer );
+	const BOOL fCoFScriptUnlockedStartDoor = FStrEq( STRING( gpGlobals->mapname ), "c_start" ) &&
+		!COF_IsEmptyDoorToken( pev->targetname ) && FStrEq( STRING( pev->targetname ), "doorlockedss" ) &&
+		!IsLocked();
+
+	if( fMasterTriggered && FStrEq( STRING( gpGlobals->mapname ), "c_start" ) &&
+		!COF_IsEmptyDoorToken( pev->targetname ) && FStrEq( STRING( pev->targetname ), "doorlockedss" ) &&
+		!COF_IsEmptyDoorToken( m_iszLockedBy ) && FStrEq( STRING( m_iszLockedBy ), "nasiss" ) )
+	{
+		SetLockedBy( NULL );
+	}
+
+	if( !m_fEnabled || ( !fMasterTriggered && !fCoFScriptUnlockedStartDoor ) || IsLocked() || COF_IsEmptyDoorToken( pev->target ) )
+	{
+		PlayDoorSound( pPlayer, m_iszLockedSound, CHAN_ITEM );
+
+		if( !COF_IsEmptyDoorToken( m_iszLockedMessage ) )
+			ClientPrint( pPlayer->pev, HUD_PRINTCENTER, STRING( m_iszLockedMessage ) );
+
+		return;
+	}
+
+	ActivateDoor( pPlayer );
+}
+
+void CInterDoor::ActivateDoor( CBasePlayer *pPlayer )
+{
+	m_hPendingPlayer = pPlayer;
+
+	PlayDoorSound( pPlayer, m_iszOpenSound, CHAN_ITEM );
+	UTIL_ScreenFade( pPlayer, Vector( 0, 0, 0 ), 0.15f, 0.05f, 255, FFADE_OUT );
+
+	SetThink( &CInterDoor::FinishTransition );
+	pev->nextthink = gpGlobals->time + 0.15f;
+}
+
+void CInterDoor::FinishTransition( void )
+{
+	CBasePlayer *pPlayer = (CBasePlayer *)(CBaseEntity *)m_hPendingPlayer;
+	m_hPendingPlayer = NULL;
+
+	if( !pPlayer || !pPlayer->IsAlive() )
+		return;
+
+	if( COF_TeleportToTarget( pPlayer, STRING( pev->target ) ) )
+	{
+		PlayDoorSound( pPlayer, m_iszCloseSound, CHAN_ITEM );
+		PlayDoorSound( pPlayer, m_iszNewLevelSound, CHAN_ITEM );
+		PlayMusic( pPlayer );
+
+		if( !COF_IsEmptyDoorToken( m_iszUnlockedSound ) )
+			PlayDoorSound( pPlayer, m_iszUnlockedSound, CHAN_ITEM );
+
+		if( !COF_IsEmptyDoorToken( m_iszUnlockedMessage ) )
+			ClientPrint( pPlayer->pev, HUD_PRINTCENTER, STRING( m_iszUnlockedMessage ) );
+
+		UTIL_ScreenFade( pPlayer, Vector( 0, 0, 0 ), 0.25f, 0.0f, 255, FFADE_IN );
+	}
+}
+
+class CCofInterDoorOnOff : public CPointEntity
+{
+public:
+	void Spawn( void );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+	void KeyValue( KeyValueData *pkvd );
+
+private:
+	string_t m_iszDoorName;
+	string_t m_iszNewLockedBy;
+};
+
+LINK_ENTITY_TO_CLASS( cof_interdooronoff, CCofInterDoorOnOff )
+
+void CCofInterDoorOnOff::Spawn( void )
+{
+	SetUse( &CCofInterDoorOnOff::Use );
+}
+
+void CCofInterDoorOnOff::KeyValue( KeyValueData *pkvd )
+{
+	if( FStrEq( pkvd->szKeyName, "message" ) )
+	{
+		m_iszDoorName = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "newlockedby" ) )
+	{
+		m_iszNewLockedBy = ALLOC_STRING( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else
+		CPointEntity::KeyValue( pkvd );
+}
+
+void CCofInterDoorOnOff::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	CBaseEntity *pEntity = NULL;
+
+	while( ( pEntity = UTIL_FindEntityByString( pEntity, "targetname", STRING( m_iszDoorName ) ) ) != NULL )
+	{
+		if( FClassnameIs( pEntity->pev, "inter_door" ) )
+		{
+			CInterDoor *pDoor = (CInterDoor *)pEntity;
+			if( pDoor->IsLocked() )
+			{
+				pDoor->SetLockedBy( NULL );
+				if( FStrEq( STRING( gpGlobals->mapname ), "c_start" ) &&
+					!COF_IsEmptyDoorToken( pDoor->pev->targetname ) && FStrEq( STRING( pDoor->pev->targetname ), "doorlockedss" ) )
+				{
+					pDoor->m_sMaster = iStringNull;
+				}
+			}
+			else if( !COF_IsEmptyDoorToken( m_iszNewLockedBy ) )
+				pDoor->SetLockedBy( STRING( m_iszNewLockedBy ) );
+
+			pDoor->SetEnabled( TRUE );
+		}
+	}
+}
+
+class CInterDoorDisable : public CPointEntity
+{
+public:
+	void Spawn( void );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+};
+
+LINK_ENTITY_TO_CLASS( inter_door_disable, CInterDoorDisable )
+
+void CInterDoorDisable::Spawn( void )
+{
+	SetUse( &CInterDoorDisable::Use );
+}
+
+void CInterDoorDisable::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	CBaseEntity *pEntity = NULL;
+	const BOOL enabled = pev->frags != 0;
+
+	while( ( pEntity = UTIL_FindEntityByString( pEntity, "targetname", STRING( pev->target ) ) ) != NULL )
+	{
+		if( FClassnameIs( pEntity->pev, "inter_door" ) )
+		{
+			CInterDoor *pDoor = (CInterDoor *)pEntity;
+			pDoor->SetEnabled( enabled );
+
+			if( enabled )
+				pDoor->SetLockedBy( NULL );
+		}
+	}
+}
+
+class CCofInterDoorExitChange : public CPointEntity
+{
+public:
+	void Spawn( void );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+};
+
+LINK_ENTITY_TO_CLASS( cof_inter_door_exitchange, CCofInterDoorExitChange )
+
+void CCofInterDoorExitChange::Spawn( void )
+{
+	SetUse( &CCofInterDoorExitChange::Use );
+}
+
+void CCofInterDoorExitChange::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	CBaseEntity *pEntity = NULL;
+
+	while( ( pEntity = UTIL_FindEntityByString( pEntity, "targetname", STRING( pev->message ) ) ) != NULL )
+	{
+		if( FClassnameIs( pEntity->pev, "inter_door" ) )
+			( (CInterDoor *)pEntity )->SetExitTarget( STRING( pev->target ) );
+	}
+}
+
+class CCofChangeLevel : public CPointEntity
+{
+public:
+	void Spawn( void );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+};
+
+LINK_ENTITY_TO_CLASS( cof_changelevel, CCofChangeLevel )
+
+void CCofChangeLevel::Spawn( void )
+{
+	SetUse( &CCofChangeLevel::Use );
+}
+
+void CCofChangeLevel::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	if( COF_IsEmptyDoorToken( pev->message ) )
+		return;
+
+	CHANGE_LEVEL( STRING( pev->message ), NULL );
+}
+
+class CTriggerCoopChangeLevel : public CBaseTrigger
+{
+public:
+	void Spawn( void );
+	void EXPORT Touch( CBaseEntity *pOther );
+};
+
+LINK_ENTITY_TO_CLASS( trigger_coop_changelevel, CTriggerCoopChangeLevel )
+
+void CTriggerCoopChangeLevel::Spawn( void )
+{
+	InitTrigger();
+	SetTouch( &CTriggerCoopChangeLevel::Touch );
+}
+
+void CTriggerCoopChangeLevel::Touch( CBaseEntity *pOther )
+{
+	if( pOther && pOther->IsPlayer() )
+		SUB_UseTargets( pOther, USE_TOGGLE, 0 );
+}
+
+class CInterDoorCoopChangeLevel : public CBaseTrigger
+{
+public:
+	void Spawn( void );
+	void Precache( void );
+	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
+	int ObjectCaps( void ) { return ( CBaseTrigger::ObjectCaps() | FCAP_IMPULSE_USE ) & ~FCAP_ACROSS_TRANSITION; }
+};
+
+LINK_ENTITY_TO_CLASS( inter_door_coop_changelevel, CInterDoorCoopChangeLevel )
+
+void CInterDoorCoopChangeLevel::Spawn( void )
+{
+	Precache();
+	InitTrigger();
+	SetTouch( NULL );
+	SetUse( &CInterDoorCoopChangeLevel::Use );
+}
+
+void CInterDoorCoopChangeLevel::Precache( void )
+{
+	COF_PrecacheSound( pev->noise );
+}
+
+void CInterDoorCoopChangeLevel::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	CBasePlayer *pPlayer = COF_PlayerFromActivator( pActivator );
+
+	if( pPlayer && !COF_IsEmptyDoorToken( pev->noise ) )
+		EMIT_SOUND( pPlayer->edict(), CHAN_ITEM, STRING( pev->noise ), 1.0f, ATTN_NORM );
+
+	if( !COF_IsEmptyDoorToken( pev->message ) )
+		CHANGE_LEVEL( STRING( pev->message ), NULL );
+}
 
 class CTriggerSave : public CBaseTrigger
 {
@@ -2113,6 +2672,8 @@ public:
 	void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 	void EXPORT FollowTarget( void );
 	void Move( void );
+	BOOL IsActiveFor( CBasePlayer *pPlayer );
+	void Deactivate( BOOL fireTargets );
 
 	virtual int Save( CSave &save );
 	virtual int Restore( CRestore &restore );
@@ -2131,6 +2692,10 @@ public:
 	float m_initialSpeed;
 	float m_acceleration;
 	float m_deceleration;
+	float m_flRoll;
+	int m_iKeepNoHud;
+	int m_iKeepBlackBars;
+	int m_iAttachment;
 	int m_state;
 };
 
@@ -2151,6 +2716,10 @@ TYPEDESCRIPTION	CTriggerCamera::m_SaveData[] =
 	DEFINE_FIELD( CTriggerCamera, m_initialSpeed, FIELD_FLOAT ),
 	DEFINE_FIELD( CTriggerCamera, m_acceleration, FIELD_FLOAT ),
 	DEFINE_FIELD( CTriggerCamera, m_deceleration, FIELD_FLOAT ),
+	DEFINE_FIELD( CTriggerCamera, m_flRoll, FIELD_FLOAT ),
+	DEFINE_FIELD( CTriggerCamera, m_iKeepNoHud, FIELD_INTEGER ),
+	DEFINE_FIELD( CTriggerCamera, m_iKeepBlackBars, FIELD_INTEGER ),
+	DEFINE_FIELD( CTriggerCamera, m_iAttachment, FIELD_INTEGER ),
 	DEFINE_FIELD( CTriggerCamera, m_state, FIELD_INTEGER ),
 };
 
@@ -2192,6 +2761,26 @@ void CTriggerCamera::KeyValue( KeyValueData *pkvd )
 		m_deceleration = atof( pkvd->szValue );
 		pkvd->fHandled = TRUE;
 	}
+	else if( FStrEq( pkvd->szKeyName, "zangle" ) )
+	{
+		m_flRoll = atof( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "keepnohud" ) )
+	{
+		m_iKeepNoHud = atoi( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "keepblackbars" ) )
+	{
+		m_iKeepBlackBars = atoi( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
+	else if( FStrEq( pkvd->szKeyName, "m_iAttachment" ) || FStrEq( pkvd->szKeyName, "iuser2" ) )
+	{
+		m_iAttachment = atoi( pkvd->szValue );
+		pkvd->fHandled = TRUE;
+	}
 	else
 		CBaseDelay::KeyValue( pkvd );
 }
@@ -2215,7 +2804,7 @@ void CTriggerCamera::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYP
 
 	m_hPlayer = pActivator;
 
-	m_flReturnTime = gpGlobals->time + m_flWait;
+	m_flReturnTime = gpGlobals->time + ( m_flWait > 0.0f ? m_flWait : 999999.0f );
 	pev->speed = m_initialSpeed;
 	m_targetSpeed = m_initialSpeed;
 
@@ -2263,12 +2852,13 @@ void CTriggerCamera::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYP
 		UTIL_SetOrigin( pev, pActivator->pev->origin + pActivator->pev->view_ofs );
 		pev->angles.x = -pActivator->pev->angles.x;
 		pev->angles.y = pActivator->pev->angles.y;
-		pev->angles.z = 0;
+		pev->angles.z = m_flRoll;
 		pev->velocity = pActivator->pev->velocity;
 	}
 	else
 	{
 		pev->velocity = Vector( 0, 0, 0 );
+		pev->angles.z = m_flRoll;
 	}
 
 	SET_VIEW( pActivator->edict(), edict() );
@@ -2290,19 +2880,13 @@ void CTriggerCamera::FollowTarget()
 
 	if( m_hTarget == 0 || m_flReturnTime < gpGlobals->time )
 	{
-		if( m_hPlayer->IsAlive() )
-		{
-			SET_VIEW( m_hPlayer->edict(), m_hPlayer->edict() );
-			( (CBasePlayer *)( (CBaseEntity *)m_hPlayer ) )->EnableControl( TRUE );
-		}
-		SUB_UseTargets( this, USE_TOGGLE, 0 );
-		pev->avelocity = Vector( 0, 0, 0 );
-		m_state = 0;
+		Deactivate( TRUE );
 		return;
 	}
 
 	Vector vecGoal = UTIL_VecToAngles( m_hTarget->pev->origin - pev->origin );
 	vecGoal.x = -vecGoal.x;
+	vecGoal.z = m_flRoll;
 
 	if( pev->angles.y > 360 )
 		pev->angles.y -= 360;
@@ -2325,6 +2909,8 @@ void CTriggerCamera::FollowTarget()
 
 	pev->avelocity.x = dx * 40 * 0.01f;
 	pev->avelocity.y = dy * 40 * 0.01f;
+	pev->angles.z = m_flRoll;
+	pev->avelocity.z = 0;
 
 	if( !( FBitSet( pev->spawnflags, SF_CAMERA_PLAYER_TAKECONTROL ) ) )
 	{
@@ -2385,4 +2971,262 @@ void CTriggerCamera::Move()
 
 	float fraction = 2 * gpGlobals->frametime;
 	pev->velocity = ( ( pev->movedir * pev->speed ) * fraction ) + ( pev->velocity * ( 1 - fraction ) );
+}
+
+BOOL CTriggerCamera::IsActiveFor( CBasePlayer *pPlayer )
+{
+	return m_state != 0 && (CBaseEntity *)m_hPlayer == pPlayer;
+}
+
+void CTriggerCamera::Deactivate( BOOL fireTargets )
+{
+	CBasePlayer *pPlayer = (CBasePlayer *)(CBaseEntity *)m_hPlayer;
+
+	if( pPlayer && pPlayer->IsAlive() )
+	{
+		SET_VIEW( pPlayer->edict(), pPlayer->edict() );
+		pPlayer->EnableControl( TRUE );
+	}
+
+	if( fireTargets )
+		SUB_UseTargets( this, USE_TOGGLE, 0 );
+
+	pev->avelocity = g_vecZero;
+	pev->velocity = g_vecZero;
+	pev->nextthink = 0;
+	SetThink( NULL );
+
+	m_state = 0;
+	m_hPlayer = NULL;
+	m_hTarget = NULL;
+	m_pentPath = NULL;
+}
+
+static BOOL COF_StringContainsI( const char *pszText, const char *pszNeedle )
+{
+	if( !pszText || !pszNeedle || !pszNeedle[0] )
+		return FALSE;
+
+	for( const char *p = pszText; *p; p++ )
+	{
+		const char *a = p;
+		const char *b = pszNeedle;
+
+		while( *a && *b && tolower( (unsigned char)*a ) == tolower( (unsigned char)*b ) )
+		{
+			a++;
+			b++;
+		}
+
+		if( !*b )
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static BOOL COF_NameHasCutsceneHint( const char *pszName )
+{
+	return COF_StringContainsI( pszName, "camera" ) ||
+		COF_StringContainsI( pszName, "kamera" ) ||
+		COF_StringContainsI( pszName, "scene" ) ||
+		COF_StringContainsI( pszName, "cut" ) ||
+		COF_StringContainsI( pszName, "intro" );
+}
+
+static BOOL COF_ClassIsCutsceneEntity( CBaseEntity *pEntity )
+{
+	if( !pEntity || FStringNull( pEntity->pev->classname ) )
+		return FALSE;
+
+	const char *pszClassname = STRING( pEntity->pev->classname );
+
+	return FStrEq( pszClassname, "trigger_camera" ) ||
+		FStrEq( pszClassname, "cof_mdlcutscene" ) ||
+		FStrEq( pszClassname, "cof_introduction" ) ||
+		FStrEq( pszClassname, "cof_credits" ) ||
+		FStrEq( pszClassname, "cof_ending" ) ||
+		FStrEq( pszClassname, "cof_telescope_camera" );
+}
+
+static BOOL COF_TargetResolvesToCutsceneEntity( string_t targetName )
+{
+	if( FStringNull( targetName ) )
+		return FALSE;
+
+	edict_t *pentTarget = NULL;
+
+	while( ( pentTarget = FIND_ENTITY_BY_TARGETNAME( pentTarget, STRING( targetName ) ) ) != NULL )
+	{
+		if( FNullEnt( pentTarget ) )
+			break;
+
+		CBaseEntity *pTarget = CBaseEntity::Instance( pentTarget );
+
+		if( COF_ClassIsCutsceneEntity( pTarget ) )
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static BOOL COF_IsManagerRunning( CMultiManager *pManager )
+{
+	if( !pManager || pManager->m_index >= pManager->m_cTargets )
+		return FALSE;
+
+	return pManager->pev->nextthink > 0 || pManager->m_pfnUse == NULL;
+}
+
+static BOOL COF_ManagerLooksLikeCutscene( CMultiManager *pManager )
+{
+	if( !pManager )
+		return FALSE;
+
+	if( !FStringNull( pManager->pev->targetname ) && COF_NameHasCutsceneHint( STRING( pManager->pev->targetname ) ) )
+		return TRUE;
+
+	for( int i = pManager->m_index; i < pManager->m_cTargets; i++ )
+	{
+		if( COF_NameHasCutsceneHint( STRING( pManager->m_iTargetName[i] ) ) )
+			return TRUE;
+
+		if( COF_TargetResolvesToCutsceneEntity( pManager->m_iTargetName[i] ) )
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static BOOL COF_HasActiveCutsceneManager( CBasePlayer *pPlayer )
+{
+	CBaseEntity *pEntity = NULL;
+
+	while( ( pEntity = UTIL_FindEntityByClassname( pEntity, "multi_manager" ) ) != NULL )
+	{
+		CMultiManager *pManager = (CMultiManager *)pEntity;
+
+		if( !COF_IsManagerRunning( pManager ) )
+			continue;
+
+		if( COF_ManagerLooksLikeCutscene( pManager ) )
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static BOOL COF_HasAnyActiveManager( void )
+{
+	CBaseEntity *pEntity = NULL;
+
+	while( ( pEntity = UTIL_FindEntityByClassname( pEntity, "multi_manager" ) ) != NULL )
+	{
+		if( COF_IsManagerRunning( (CMultiManager *)pEntity ) )
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static BOOL COF_HasActiveCamera( CBasePlayer *pPlayer )
+{
+	CBaseEntity *pEntity = NULL;
+
+	while( ( pEntity = UTIL_FindEntityByClassname( pEntity, "trigger_camera" ) ) != NULL )
+	{
+		CTriggerCamera *pCamera = (CTriggerCamera *)pEntity;
+
+		if( pCamera->IsActiveFor( pPlayer ) )
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
+static int COF_FastForwardActiveManagers( CBasePlayer *pPlayer, BOOL skipAllActiveManagers )
+{
+	int firedTargets = 0;
+
+	for( int pass = 0; pass < 16; pass++ )
+	{
+		BOOL advanced = FALSE;
+		CBaseEntity *pEntity = NULL;
+
+		while( ( pEntity = UTIL_FindEntityByClassname( pEntity, "multi_manager" ) ) != NULL )
+		{
+			CMultiManager *pManager = (CMultiManager *)pEntity;
+
+			if( !COF_IsManagerRunning( pManager ) )
+				continue;
+
+			if( !skipAllActiveManagers && (CBaseEntity *)pManager->m_hActivator != pPlayer && !COF_ManagerLooksLikeCutscene( pManager ) )
+				continue;
+
+			while( pManager->m_index < pManager->m_cTargets )
+			{
+				FireTargets( STRING( pManager->m_iTargetName[pManager->m_index] ), pPlayer, pManager, USE_TOGGLE, 0 );
+				pManager->m_index++;
+				firedTargets++;
+				advanced = TRUE;
+			}
+
+			pManager->SetThink( NULL );
+			pManager->pev->nextthink = 0;
+
+			if( pManager->pev->spawnflags & SF_MULTIMAN_CLONE )
+				UTIL_Remove( pManager );
+			else
+				pManager->SetUse( &CMultiManager::ManagerUse );
+		}
+
+		if( !advanced )
+			break;
+	}
+
+	return firedTargets;
+}
+
+BOOL COF_TrySkipActiveCutscene( CBasePlayer *pPlayer )
+{
+	if( !pPlayer )
+		return FALSE;
+
+	static float flNextSkipTime[33];
+	const int playerIndex = pPlayer->entindex();
+	const BOOL hasActiveCamera = COF_HasActiveCamera( pPlayer );
+	const BOOL hasActiveCutsceneManager = COF_HasActiveCutsceneManager( pPlayer );
+
+	if( !hasActiveCamera && !hasActiveCutsceneManager )
+	{
+		if( !( pPlayer->pev->flags & FL_FROZEN ) || !COF_HasAnyActiveManager() )
+			return FALSE;
+	}
+
+	if( playerIndex > 0 && playerIndex < 33 )
+	{
+		if( gpGlobals->time < flNextSkipTime[playerIndex] )
+			return TRUE;
+
+		flNextSkipTime[playerIndex] = gpGlobals->time + 0.5f;
+	}
+
+	COF_FastForwardActiveManagers( pPlayer, TRUE );
+
+	CBaseEntity *pEntity = NULL;
+
+	while( ( pEntity = UTIL_FindEntityByClassname( pEntity, "trigger_camera" ) ) != NULL )
+	{
+		CTriggerCamera *pCamera = (CTriggerCamera *)pEntity;
+
+		if( pCamera->IsActiveFor( pPlayer ) )
+			pCamera->Deactivate( FALSE );
+	}
+
+	SET_VIEW( pPlayer->edict(), pPlayer->edict() );
+	pPlayer->EnableControl( TRUE );
+	pPlayer->pev->velocity = g_vecZero;
+	pPlayer->pev->avelocity = g_vecZero;
+
+	return TRUE;
 }

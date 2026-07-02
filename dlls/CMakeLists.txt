@@ -62,6 +62,20 @@ set (SVDLL_SOURCES
 	client.cpp
 	combat.cpp
 	controller.cpp
+	cof_entities.cpp
+	cof_brush_triggers.cpp
+	cof_inventory.cpp
+	cof_ladder_manager.cpp
+	cof_ladder_use.cpp
+	cof_monsters.cpp
+	cof_player_events.cpp
+	cof_pickups.cpp
+	cof_scene_actions.cpp
+	cof_scene_models.cpp
+	cof_script_points.cpp
+	cof_static_props.cpp
+	cof_text_audio.cpp
+	cof_world_effects.cpp
 	crossbow.cpp
 	crowbar.cpp
 	defaultai.cpp
@@ -105,6 +119,8 @@ set (SVDLL_SOURCES
 	monsterstate.cpp
 	mortar.cpp
 	mp5.cpp
+	mobile.cpp
+	mobile_switchblade.cpp
 	multiplay_gamerules.cpp
 	nihilanth.cpp
 	nodes.cpp
@@ -132,6 +148,7 @@ set (SVDLL_SOURCES
 	squadmonster.cpp
 	squeakgrenade.cpp
 	subs.cpp
+	switchblade.cpp
 	talkmonster.cpp
 	teamplay_gamerules.cpp
 	tempmonster.cpp
